@@ -1128,10 +1128,13 @@ json_get_context (json_stream *json, size_t *count)
 int
 json_source_get (json_stream *json)
 {
-  /* If the caller reads a multi-byte UTF-8 sequence, we expect them to read
-   * it in its entirety. We also assume that any invalid bytes within such a
-   * sequence belong to the same column (as opposed to starting a new column
-   * or some such). */
+  // If the caller reads a multi-byte UTF-8 sequence, we expect them to read
+  // it in its entirety. We also assume that any invalid bytes within such a
+  // sequence belong to the same column (as opposed to starting a new column
+  // or some such).
+  //
+  // In JSON5, if the caller starts reading a comment, we expect them to
+  // finish reading it.
 
   int c = json->source.get (&json->source);
   if (json->linecon > 0)
