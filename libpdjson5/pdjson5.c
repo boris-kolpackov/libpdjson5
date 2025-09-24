@@ -8,8 +8,8 @@
 #include <string.h>
 #include <ctype.h>
 
-#ifndef PDJSON_H
-#  include "pdjson.h"
+#ifndef PDJSON5_H
+#  include "pdjson5.h"
 #endif
 
 #define JSON_FLAG_ERROR      (1u << 0)
@@ -38,9 +38,9 @@
 
 #endif /* _MSC_VER */
 
-/* See also PDJSON_STACK_MAX below. */
-#ifndef PDJSON_STACK_INC
-#  define PDJSON_STACK_INC 4
+/* See also PDJSON5_STACK_MAX below. */
+#ifndef PDJSON5_STACK_INC
+#  define PDJSON5_STACK_INC 4
 #endif
 
 struct json_stack {
@@ -51,30 +51,32 @@ struct json_stack {
 static enum json_type
 push(json_stream *json, enum json_type type)
 {
-    json->stack_top++;
+    size_t new_stack_top = json->stack_top + 1;
 
-#ifdef PDJSON_STACK_MAX
-    if (json->stack_top > PDJSON_STACK_MAX) {
+#ifdef PDJSON5_STACK_MAX
+    if (new_stack_top > PDJSON5_STACK_MAX) {
         json_error(json, "%s", "maximum depth of nesting reached");
         return JSON_ERROR;
     }
 #endif
 
-    if (json->stack_top >= json->stack_size) {
+    if (new_stack_top >= json->stack_size) {
         struct json_stack *stack;
-        size_t size = (json->stack_size + PDJSON_STACK_INC) * sizeof(*json->stack);
+        size_t size = (json->stack_size + PDJSON5_STACK_INC) * sizeof(*json->stack);
         stack = (struct json_stack *)json->alloc.realloc(json->stack, size);
         if (stack == NULL) {
             json_error(json, "%s", "out of memory");
             return JSON_ERROR;
         }
 
-        json->stack_size += PDJSON_STACK_INC;
+        json->stack_size += PDJSON5_STACK_INC;
         json->stack = stack;
     }
 
-    json->stack[json->stack_top].type = type;
-    json->stack[json->stack_top].count = 0;
+    json->stack[new_stack_top].type = type;
+    json->stack[new_stack_top].count = 0;
+
+    json->stack_top = new_stack_top;
 
     return type;
 }

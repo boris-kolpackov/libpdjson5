@@ -1,8 +1,8 @@
-#ifndef PDJSON_H
-#define PDJSON_H
+#ifndef PDJSON5_H
+#define PDJSON5_H
 
-#ifndef PDJSON_SYMEXPORT
-#   define PDJSON_SYMEXPORT
+#ifndef PDJSON5_SYMEXPORT
+#   define PDJSON5_SYMEXPORT
 #endif
 
 #ifdef __cplusplus
@@ -22,9 +22,17 @@ extern "C" {
 #include <stdio.h>
 
 enum json_type {
-    JSON_ERROR = 1, JSON_DONE,
-    JSON_OBJECT, JSON_OBJECT_END, JSON_ARRAY, JSON_ARRAY_END,
-    JSON_STRING, JSON_NUMBER, JSON_TRUE, JSON_FALSE, JSON_NULL
+    JSON_ERROR = 1,
+    JSON_DONE,
+    JSON_OBJECT,
+    JSON_OBJECT_END,
+    JSON_ARRAY,
+    JSON_ARRAY_END,
+    JSON_STRING,
+    JSON_NUMBER,
+    JSON_TRUE,
+    JSON_FALSE,
+    JSON_NULL
 };
 
 struct json_allocator {
@@ -38,34 +46,34 @@ typedef int (*json_user_io)(void *user);
 typedef struct json_stream json_stream;
 typedef struct json_allocator json_allocator;
 
-PDJSON_SYMEXPORT void json_open_buffer(json_stream *json, const void *buffer, size_t size);
-PDJSON_SYMEXPORT void json_open_string(json_stream *json, const char *string);
-PDJSON_SYMEXPORT void json_open_stream(json_stream *json, FILE *stream);
-PDJSON_SYMEXPORT void json_open_user(json_stream *json, json_user_io get, json_user_io peek, void *user);
-PDJSON_SYMEXPORT void json_close(json_stream *json);
+PDJSON5_SYMEXPORT void json_open_buffer(json_stream *json, const void *buffer, size_t size);
+PDJSON5_SYMEXPORT void json_open_string(json_stream *json, const char *string);
+PDJSON5_SYMEXPORT void json_open_stream(json_stream *json, FILE *stream);
+PDJSON5_SYMEXPORT void json_open_user(json_stream *json, json_user_io get, json_user_io peek, void *user);
+PDJSON5_SYMEXPORT void json_close(json_stream *json);
 
-PDJSON_SYMEXPORT void json_set_allocator(json_stream *json, json_allocator *a);
-PDJSON_SYMEXPORT void json_set_streaming(json_stream *json, bool mode);
+PDJSON5_SYMEXPORT void json_set_allocator(json_stream *json, json_allocator *a);
+PDJSON5_SYMEXPORT void json_set_streaming(json_stream *json, bool mode);
 
-PDJSON_SYMEXPORT enum json_type json_next(json_stream *json);
-PDJSON_SYMEXPORT enum json_type json_peek(json_stream *json);
-PDJSON_SYMEXPORT void json_reset(json_stream *json);
-PDJSON_SYMEXPORT const char *json_get_string(json_stream *json, size_t *length);
-PDJSON_SYMEXPORT double json_get_number(json_stream *json);
+PDJSON5_SYMEXPORT enum json_type json_next(json_stream *json);
+PDJSON5_SYMEXPORT enum json_type json_peek(json_stream *json);
+PDJSON5_SYMEXPORT void json_reset(json_stream *json);
+PDJSON5_SYMEXPORT const char *json_get_string(json_stream *json, size_t *length);
+PDJSON5_SYMEXPORT double json_get_number(json_stream *json);
 
-PDJSON_SYMEXPORT enum json_type json_skip(json_stream *json);
-PDJSON_SYMEXPORT enum json_type json_skip_until(json_stream *json, enum json_type type);
+PDJSON5_SYMEXPORT enum json_type json_skip(json_stream *json);
+PDJSON5_SYMEXPORT enum json_type json_skip_until(json_stream *json, enum json_type type);
 
-PDJSON_SYMEXPORT size_t json_get_lineno(json_stream *json);
-PDJSON_SYMEXPORT size_t json_get_position(json_stream *json);
-PDJSON_SYMEXPORT size_t json_get_column(json_stream *json);
-PDJSON_SYMEXPORT size_t json_get_depth(json_stream *json);
-PDJSON_SYMEXPORT enum json_type json_get_context(json_stream *json, size_t *count);
-PDJSON_SYMEXPORT const char *json_get_error(json_stream *json);
+PDJSON5_SYMEXPORT size_t json_get_lineno(json_stream *json);
+PDJSON5_SYMEXPORT size_t json_get_position(json_stream *json);
+PDJSON5_SYMEXPORT size_t json_get_column(json_stream *json);
+PDJSON5_SYMEXPORT size_t json_get_depth(json_stream *json);
+PDJSON5_SYMEXPORT enum json_type json_get_context(json_stream *json, size_t *count);
+PDJSON5_SYMEXPORT const char *json_get_error(json_stream *json);
 
-PDJSON_SYMEXPORT int json_source_get(json_stream *json);
-PDJSON_SYMEXPORT int json_source_peek(json_stream *json);
-PDJSON_SYMEXPORT bool json_isspace(int c);
+PDJSON5_SYMEXPORT int json_source_get(json_stream *json);
+PDJSON5_SYMEXPORT int json_source_peek(json_stream *json);
+PDJSON5_SYMEXPORT bool json_isspace(int c);
 
 /* internal */
 
@@ -144,4 +152,4 @@ struct json_stream {
 } /* extern "C" */
 #endif /* __cplusplus */
 
-#endif
+#endif /* PDJSON5_H */
