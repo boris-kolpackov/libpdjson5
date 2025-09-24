@@ -1,0 +1,42 @@
+lib{pdjson5}: {h c}{** -version} h{version}
+
+# Include the generated version header into the distribution (so that we don't
+# pick up an installed one) and don't remove it when cleaning in src (so that
+# clean results in a state identical to distributed).
+#
+h{version}: in{version} $src_root/manifest
+{
+  dist  = true
+  clean = ($src_root != $out_root)
+}
+
+# Build options.
+#
+c.poptions =+ "-I$out_root" "-I$src_root"
+
+c.poptions += -DPDJSON5_STACK_INC=16 -DPDJSON5_STACK_MAX=2048
+
+if ($c.target.class == 'windows')
+  objs{*}: c.poptions += '-DPDJSON5_SYMEXPORT=__declspec(dllexport)'
+
+# Export options.
+#
+lib{pdjson5}: c.export.poptions = "-I$out_root" "-I$src_root"
+
+# For pre-releases use the complete version to make sure they cannot be used
+# in place of another pre-release or the final version. See the version module
+# for details on the version.* variable values.
+#
+if $version.pre_release
+  lib{pdjson5}: bin.lib.version = "-$version.project_id"
+else
+  lib{pdjson5}: bin.lib.version = "-$version.major.$version.minor"
+
+# Install into the libpdjson5/ subdirectory of, say, /usr/include/
+# recreating subdirectories.
+#
+h{*}:
+{
+  install         = include/libpdjson5/
+  install.subdirs = true
+}

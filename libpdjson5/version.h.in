@@ -1,0 +1,34 @@
+#pragma once
+
+/* The numeric version format is AAAAABBBBBCCCCCDDDE where:
+ *
+ * AAAAA - major version number
+ * BBBBB - minor version number
+ * CCCCC - bugfix version number
+ * DDD   - alpha / beta (DDD + 500) version number
+ * E     - final (0) / snapshot (1)
+ *
+ * When DDDE is not 0, 1 is subtracted from AAAAABBBBBCCCCC. For example:
+ *
+ * Version      AAAAABBBBBCCCCCDDDE
+ *
+ * 0.1.0        0000000001000000000
+ * 0.1.2        0000000001000020000
+ * 1.2.3        0000100002000030000
+ * 2.2.0-a.1    0000200001999990010
+ * 3.0.0-b.2    0000299999999995020
+ * 2.2.0-a.1.z  0000200001999990011
+ */
+#define LIBPDJSON5_VERSION       $libpdjson5.version.project_number$ULL
+#define LIBPDJSON5_VERSION_STR   "$libpdjson5.version.project$"
+#define LIBPDJSON5_VERSION_ID    "$libpdjson5.version.project_id$"
+#define LIBPDJSON5_VERSION_FULL  "$libpdjson5.version$"
+
+#define LIBPDJSON5_VERSION_MAJOR $libpdjson5.version.major$
+#define LIBPDJSON5_VERSION_MINOR $libpdjson5.version.minor$
+#define LIBPDJSON5_VERSION_PATCH $libpdjson5.version.patch$
+
+#define LIBPDJSON5_PRE_RELEASE   $libpdjson5.version.pre_release$
+
+#define LIBPDJSON5_SNAPSHOT_SN   $libpdjson5.version.snapshot_sn$ULL
+#define LIBPDJSON5_SNAPSHOT_ID   "$libpdjson5.version.snapshot_id$"
