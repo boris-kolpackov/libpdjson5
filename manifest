@@ -1,0 +1,13 @@
+: 1
+name: libpdjson5
+version: 0.1.0-a.0.z
+language: c
+summary: JSON/JSON5 pull parser C library
+license: Unlicense
+topics: JSON, C, parser
+description-file: README.md
+url: https://github.com/boris-kolpackov/libpdjson5
+email: boris@codesynthesis.com
+builds: all
+depends: * build2 >= 0.18.0-
+depends: * bpkg >= 0.18.0-

@@ -1,0 +1,6 @@
+$out_root/
+{
+  include libpdjson5/
+}
+
+export $out_root/libpdjson5/$import.target
