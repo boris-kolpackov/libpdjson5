@@ -38,51 +38,51 @@ enum json_type
 
 struct json_allocator
 {
-  void *(*malloc)(size_t);
-  void *(*realloc)(void *, size_t);
-  void (*free)(void *);
+  void *(*malloc) (size_t);
+  void *(*realloc) (void *, size_t);
+  void (*free) (void *);
 };
 
-typedef int (*json_user_io)(void *user);
+typedef int (*json_user_io) (void *user);
 
 typedef struct json_stream json_stream;
 typedef struct json_allocator json_allocator;
 
-PDJSON5_SYMEXPORT void json_open_buffer(json_stream *json, const void *buffer, size_t size);
-PDJSON5_SYMEXPORT void json_open_string(json_stream *json, const char *string);
-PDJSON5_SYMEXPORT void json_open_stream(json_stream *json, FILE *stream);
-PDJSON5_SYMEXPORT void json_open_user(json_stream *json, json_user_io get, json_user_io peek, void *user);
-PDJSON5_SYMEXPORT void json_close(json_stream *json);
+PDJSON5_SYMEXPORT void json_open_buffer (json_stream *json, const void *buffer, size_t size);
+PDJSON5_SYMEXPORT void json_open_string (json_stream *json, const char *string);
+PDJSON5_SYMEXPORT void json_open_stream (json_stream *json, FILE *stream);
+PDJSON5_SYMEXPORT void json_open_user (json_stream *json, json_user_io get, json_user_io peek, void *user);
+PDJSON5_SYMEXPORT void json_close (json_stream *json);
 
-PDJSON5_SYMEXPORT void json_set_allocator(json_stream *json, json_allocator *a);
-PDJSON5_SYMEXPORT void json_set_streaming(json_stream *json, bool mode);
+PDJSON5_SYMEXPORT void json_set_allocator (json_stream *json, json_allocator *a);
+PDJSON5_SYMEXPORT void json_set_streaming (json_stream *json, bool mode);
 
-PDJSON5_SYMEXPORT enum json_type json_next(json_stream *json);
-PDJSON5_SYMEXPORT enum json_type json_peek(json_stream *json);
-PDJSON5_SYMEXPORT void json_reset(json_stream *json);
-PDJSON5_SYMEXPORT const char *json_get_string(json_stream *json, size_t *length);
-PDJSON5_SYMEXPORT double json_get_number(json_stream *json);
+PDJSON5_SYMEXPORT enum json_type json_next (json_stream *json);
+PDJSON5_SYMEXPORT enum json_type json_peek (json_stream *json);
+PDJSON5_SYMEXPORT void json_reset (json_stream *json);
+PDJSON5_SYMEXPORT const char *json_get_string (json_stream *json, size_t *length);
+PDJSON5_SYMEXPORT double json_get_number (json_stream *json);
 
-PDJSON5_SYMEXPORT enum json_type json_skip(json_stream *json);
-PDJSON5_SYMEXPORT enum json_type json_skip_until(json_stream *json, enum json_type type);
+PDJSON5_SYMEXPORT enum json_type json_skip (json_stream *json);
+PDJSON5_SYMEXPORT enum json_type json_skip_until (json_stream *json, enum json_type type);
 
-PDJSON5_SYMEXPORT size_t json_get_lineno(json_stream *json);
-PDJSON5_SYMEXPORT size_t json_get_position(json_stream *json);
-PDJSON5_SYMEXPORT size_t json_get_column(json_stream *json);
-PDJSON5_SYMEXPORT size_t json_get_depth(json_stream *json);
-PDJSON5_SYMEXPORT enum json_type json_get_context(json_stream *json, size_t *count);
-PDJSON5_SYMEXPORT const char *json_get_error(json_stream *json);
+PDJSON5_SYMEXPORT size_t json_get_lineno (json_stream *json);
+PDJSON5_SYMEXPORT size_t json_get_position (json_stream *json);
+PDJSON5_SYMEXPORT size_t json_get_column (json_stream *json);
+PDJSON5_SYMEXPORT size_t json_get_depth (json_stream *json);
+PDJSON5_SYMEXPORT enum json_type json_get_context (json_stream *json, size_t *count);
+PDJSON5_SYMEXPORT const char *json_get_error (json_stream *json);
 
-PDJSON5_SYMEXPORT int json_source_get(json_stream *json);
-PDJSON5_SYMEXPORT int json_source_peek(json_stream *json);
-PDJSON5_SYMEXPORT bool json_isspace(int c);
+PDJSON5_SYMEXPORT int json_source_get (json_stream *json);
+PDJSON5_SYMEXPORT int json_source_peek (json_stream *json);
+PDJSON5_SYMEXPORT bool json_isspace (int c);
 
 /* internal */
 
 struct json_source
 {
-  int (*get)(struct json_source *);
-  int (*peek)(struct json_source *);
+  int (*get) (struct json_source *);
+  int (*peek) (struct json_source *);
   size_t position;
   union
   {
@@ -139,7 +139,7 @@ struct json_stream {
   size_t stack_top;
   size_t stack_size;
   enum json_type next;
-  unsigned flags;
+  unsigned int flags;
 
   struct
   {
