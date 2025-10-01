@@ -1,0 +1,2 @@
+./: {*/ -build/ -fuzz-llvm/}
+./: fuzz-llvm/: include = false # Build and run manually.

@@ -1,0 +1,158 @@
+: integer
+:
+$* <"  1024$\n" >>EOO
+  1,  3: 1024
+EOO
+
+: true
+:
+$* <"  true $\n" >>EOO
+  1,  3: <true>
+EOO
+
+: false
+:
+$* <"$\nfalse$\r$\n" >>EOO
+  2,  1: <false>
+EOO
+
+: null
+:
+$* <"$\tnull" >>EOO
+  1,  2: <null>
+EOO
+
+: string
+:
+{{
+  : simple
+  :
+  $* <'"foo"' >>EOO
+    1,  1: "foo"
+  EOO
+
+  : escape
+  :
+  $* <'"Tim \"The Tool Man\" Taylor"' >>EOO
+    1,  1: "Tim "The Tool Man" Taylor"
+  EOO
+
+  : unicode-escape
+  :
+  $* <'"\u0068\u0065\u006c\u006c\u006F"' >>EOO
+    1,  1: "hello"
+  EOO
+
+  : unicode-escape-surrogate
+  :
+  : This is a valid encoding for U+10000.
+  :
+  $* <'":\uD800\uDC00"' >>EOO
+    1,  1: ":𐀀"
+  EOO
+
+  : invalid-surrogate-range
+  :
+  : This surrogate half must precede another half.
+  :
+  $* <'"\uD800\u0065"' 2>>EOE !=0
+  <stdin>:1:13: error: surrogate pair continuation \u0065 out of range (dc00-dfff)
+  EOE
+
+  : invalid-surrogate-alone
+  :
+  : This surrogate half cannot be alone.
+  :
+  $* <'"\uDC00"' 2>>EOE !=0
+  <stdin>:1:7: error: dangling surrogate \udc00
+  EOE
+
+  : invalid-surrogate-misorder
+  :
+  : Surrogate halves are in the wrong order.
+  :
+  $* <'":\uDc00\uD800"' 2>>EOE !=0
+  <stdin>:1:8: error: dangling surrogate \udc00
+  EOE
+}}
+
+: object
+:
+$* <'{"abc": -1}' >>EOO
+  1,  1: {
+  1,  2:   abc
+  1,  9:   -1
+  1, 11: }
+EOO
+
+: array
+:
+{{
+
+  : basics
+  :
+  $* <'[1, "two", true, null]' >>EOO
+    1,  1: [
+    1,  2:   1
+    1,  5:   "two"
+    1, 12:   <true>
+    1, 18:   <null>
+    1, 22: ]
+  EOO
+
+  : incomplete
+  :
+  $* <'[1, 2, 3' >>EOO 2>>EOE !=0
+    1,  1: [
+    1,  2:   1
+    1,  5:   2
+    1,  8:   3
+  EOO
+  <stdin>:2:0: error: unexpected end of text
+  EOE
+}}
+
+: stream
+{{
+  : number
+  :
+  $* --streaming <'1 10 100 2002' >>EOO
+    1,  1: 1
+    1,  3: 10
+    1,  6: 100
+    1, 10: 2002
+  EOO
+
+  : mixed
+  :
+  $* --streaming <<EOI >>EOO
+  {"foo": [1, 2, 3]}
+  []
+  "name"
+  EOI
+    1,  1: {
+    1,  2:   foo
+    1,  9:   [
+    1, 10:     1
+    1, 13:     2
+    1, 16:     3
+    1, 17:   ]
+    1, 18: }
+    2,  1: [
+    2,  2: ]
+    3,  1: "name"
+  EOO
+
+  : empty
+  :
+  $* --streaming <" $\n"
+
+  : separation
+  :
+  $* --streaming <"1$\n10 $\n100 $\n 2002" >>EOO
+    1,  1: 1
+    2,  1: 10
+    3,  1: 100
+    4,  2: 2002
+  EOO
+}}
