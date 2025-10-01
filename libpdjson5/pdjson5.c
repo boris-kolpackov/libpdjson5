@@ -922,7 +922,6 @@ json_next (json_stream *json)
       {
         json_error (json, "%s", "unexpected end of text");
       }
-
       return JSON_ERROR;
     }
   }
