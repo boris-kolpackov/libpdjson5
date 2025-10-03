@@ -56,6 +56,8 @@ PDJSON5_SYMEXPORT void json_close (json_stream *json);
 
 PDJSON5_SYMEXPORT void json_set_allocator (json_stream *json, json_allocator *a);
 PDJSON5_SYMEXPORT void json_set_streaming (json_stream *json, bool mode);
+PDJSON5_SYMEXPORT void json_set_json5 (json_stream *json, bool mode);
+
 
 PDJSON5_SYMEXPORT enum json_type json_next (json_stream *json);
 PDJSON5_SYMEXPORT enum json_type json_peek (json_stream *json);
