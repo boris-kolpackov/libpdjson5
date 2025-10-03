@@ -6,16 +6,17 @@
 #undef NDEBUG
 #include <assert.h>
 
-/* Parse the data in the specified stream mode returning true if the data is
-   valid JSON and false otherwise. */
+/* Parse the input text in the specified mode returning true if it is valid
+   and false otherwise. */
 static bool
-parse (const void *data, size_t size, bool stream)
+parse (const void *data, size_t size, bool stream, bool json5)
 {
   struct json_stream json[1];
   enum json_type t = JSON_DONE;
 
   json_open_buffer (json, data, size);
   json_set_streaming (json, stream);
+  json_set_json5 (json, json5);
 
   do
   {
@@ -53,9 +54,16 @@ parse (const void *data, size_t size, bool stream)
 int
 LLVMFuzzerTestOneInput (const uint8_t* data, size_t size)
 {
-  /* If it's valid in the strict mode, then don't waste time parsing it in
-     relaxed. */
-  if (!parse (data, size, false))
-    parse (data, size, true);
+  /* If the input is valid in the stricter mode, then don't waste time parsing
+     it in more relaxed. */
+  if (!parse (data, size, false, false))
+  {
+    if (!parse (data, size, true, false) &&
+        !parse (data, size, false, true))
+      {
+        parse (data, size, true, true);
+      }
+  }
+
   return 0;
 }

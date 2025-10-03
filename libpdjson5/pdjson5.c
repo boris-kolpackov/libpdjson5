@@ -12,8 +12,9 @@
 #  include "pdjson5.h"
 #endif
 
-#define JSON_FLAG_ERROR      (1u << 0)
-#define JSON_FLAG_STREAMING  (1u << 1)
+#define JSON_FLAG_ERROR      0x01U
+#define JSON_FLAG_STREAMING  0x02U
+#define JSON_FLAG_JSON5      0x04U
 
 #if defined(_MSC_VER) && (_MSC_VER < 1900)
 
@@ -1218,12 +1219,21 @@ json_set_allocator (json_stream *json, json_allocator *a)
 }
 
 void
-json_set_streaming (json_stream *json, bool streaming)
+json_set_streaming (json_stream *json, bool mode)
 {
-  if (streaming)
+  if (mode)
     json->flags |= JSON_FLAG_STREAMING;
   else
     json->flags &= ~JSON_FLAG_STREAMING;
+}
+
+void
+json_set_json5 (json_stream *json, bool mode)
+{
+  if (mode)
+    json->flags |= JSON_FLAG_JSON5;
+  else
+    json->flags &= ~JSON_FLAG_JSON5;
 }
 
 void

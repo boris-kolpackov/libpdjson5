@@ -1,6 +1,7 @@
-// Usage: driver [--streaming]
+// Usage: driver [<options>]
 //
-// --streaming  --  unable streaming/multi-value mode
+// --streaming  --  enable streaming/multi-value mode
+// --json5      --  accept JSON5 input
 //
 
 #include <stdio.h>
@@ -18,6 +19,7 @@ int
 main (int argc, char *argv[])
 {
   bool streaming  = false;
+  bool json5 = false;
 
   for (int i = 1; i < argc; ++i)
   {
@@ -25,6 +27,8 @@ main (int argc, char *argv[])
 
     if (strcmp (a, "--streaming") == 0)
       streaming = true;
+    else if (strcmp (a, "--json5") == 0)
+      json5 = true;
     else
     {
       fprintf (stderr, "error: unexpected argument '%s'\n", a);
@@ -35,6 +39,7 @@ main (int argc, char *argv[])
   json_stream json;
   json_open_stream (&json, stdin);
   json_set_streaming (&json, streaming);
+  json_set_json5 (&json, json5);
 
   size_t ind = 0; // Indentation.
 
