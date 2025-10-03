@@ -765,7 +765,9 @@ newline (json_stream *json)
   json->linecon = 0;
 }
 
-/* Returns the next non-whitespace character in the stream.
+/* Returns the next non-whitespace (and non-comment, for JSON5) character in
+ * the stream. This function can fail by returning EOF and setting the error
+ * flag.
  *
  * Note that this is the only function (besides user-facing json_source_get())
  * that needs to worry about newline housekeeping.
@@ -774,10 +776,75 @@ static int
 next (json_stream *json)
 {
   int c;
-  while (json_isspace (c = json->source.get (&json->source)))
+  while (true)
   {
-    if (c == '\n')
-      newline (json);
+    c = json->source.get (&json->source);
+
+    if (json_isspace (c))
+    {
+      if (c == '\n')
+        newline (json);
+
+      continue;
+    }
+
+    if (json->flags & JSON_FLAG_JSON5)
+    {
+      if (c == '/')
+      {
+        switch (json->source.peek (&json->source))
+        {
+        case '/':
+          {
+            // Skip everything until the next newline or EOF.
+            //
+            while ((c = json->source.get (&json->source)) != EOF)
+            {
+              if (c == '\n')
+              {
+                newline (json);
+                break;
+              }
+            }
+
+            if (c != EOF)
+              continue;
+
+            break;
+          }
+        case '*':
+          {
+            // Skip everything until closing `*/` or EOF.
+            //
+            json->source.get (&json->source); // Consume opening `*`.
+
+            while ((c = json->source.get (&json->source)) != EOF)
+            {
+              if (c == '*')
+              {
+                if (json->source.peek (&json->source) == '/')
+                {
+                  c = json->source.get (&json->source); // Consume closing `/`.
+                  break;
+                }
+              }
+              else if (c == '\n')
+                newline (json);
+            }
+
+            if (c != EOF)
+              continue;
+
+            json_error (json, "%s", "unexpected end of text before '*/'");
+            break;
+          }
+        default:
+          break;
+        }
+      }
+    }
+
+    break;
   }
   return c;
 }
@@ -875,6 +942,9 @@ json_next (json_stream *json)
     if (!(json->flags & JSON_FLAG_STREAMING))
     {
       int c = next (json);
+      if (json->flags & JSON_FLAG_ERROR)
+        return JSON_ERROR;
+
       if (c != EOF)
       {
         json_error (json, "expected end of text instead of byte '%c'", c);
@@ -886,6 +956,9 @@ json_next (json_stream *json)
   }
 
   int c = next (json);
+  if (json->flags & JSON_FLAG_ERROR)
+    return JSON_ERROR;
+
   if (json->stack_top == (size_t)-1)
   {
     if (c == EOF && (json->flags & JSON_FLAG_STREAMING))
@@ -907,7 +980,12 @@ json_next (json_stream *json)
     else if (c == ',')
     {
       json->stack[json->stack_top].count++;
-      return read_value (json, next (json));
+
+      c = next (json);
+      if (json->flags & JSON_FLAG_ERROR)
+        return JSON_ERROR;
+
+      return read_value (json, c);
     }
     else if (c == ']')
     {
@@ -962,7 +1040,11 @@ json_next (json_stream *json)
       }
       else
       {
-        enum json_type value = read_value (json, next (json));
+        c = next (json);
+        if (json->flags & JSON_FLAG_ERROR)
+          return JSON_ERROR;
+
+        enum json_type value = read_value (json, c);
         if (value != JSON_STRING)
         {
           if (value != JSON_ERROR)
@@ -988,7 +1070,12 @@ json_next (json_stream *json)
       else
       {
         json->stack[json->stack_top].count++;
-        return read_value (json, next (json));
+
+        c = next (json);
+        if (json->flags & JSON_FLAG_ERROR)
+          return JSON_ERROR;
+
+        return read_value (json, c);
       }
     }
   }
