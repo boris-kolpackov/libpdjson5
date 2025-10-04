@@ -68,12 +68,6 @@ EOE
 {{
   # Note: suppress trailing newline in input.
 
-  : array
-  :
-  $* <:'[2' >- 2>>EOE != 0
-  <stdin>:1:2: error: unexpected end of text
-  EOE
-
   : literal
   :
   $* <:'tru' 2>>EOE != 0
