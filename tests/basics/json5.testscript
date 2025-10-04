@@ -1,5 +1,76 @@
 test.options = --json5
 
+: comma
+:
+{{
+  : array
+  :
+  $* <<EOI >>EOO
+  [
+    1,
+    2,
+  ]
+  EOI
+    1,  1: [
+    2,  3:   1
+    3,  3:   2
+    4,  1: ]
+  EOO
+
+  : array-empty
+  :
+  $* <<EOI >>EOO 2>>EOE !=0
+  [
+    ,
+  ]
+  EOI
+    1,  1: [
+  EOO
+  <stdin>:2:3: error: unexpected byte ',' in value
+  EOE
+
+  : object
+  :
+  $* <<EOI >>EOO
+  {
+    "foo": 1,
+    "bar": 2,
+  }
+  EOI
+    1,  1: {
+    2,  3:   foo
+    2, 10:   1
+    3,  3:   bar
+    3, 10:   2
+    4,  1: }
+  EOO
+
+  : object-empty
+  :
+  $* <<EOI >>EOO 2>>EOE !=0
+  {
+    ,
+  }
+  EOI
+    1,  1: {
+  EOO
+  <stdin>:2:3: error: unexpected byte ',' in value
+  EOE
+
+  : object-after-name
+  :
+  $* <<EOI >>EOO 2>>EOE !=0
+  {
+    "foo" ,
+  }
+  EOI
+    1,  1: {
+    2,  3:   foo
+  EOO
+  <stdin>:2:9: error: expected ':' after member name
+  EOE
+}}
+
 : comments
 :
 {{

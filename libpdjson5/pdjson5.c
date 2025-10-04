@@ -971,7 +971,8 @@ json_next (json_stream *json)
   {
     if (json->stack[json->stack_top].count == 0)
     {
-      /* No array values yet. */
+      // No array values yet.
+      //
       if (c == ']')
         return pop (json, c, JSON_ARRAY);
 
@@ -979,16 +980,23 @@ json_next (json_stream *json)
       return read_value (json, c);
     }
 
-    /* Expecting comma followed by array value or closing brace. */
+    // Expecting comma followed by array value or closing brace.
+    //
+    // In JSON5 comma can be followed directly by the closing brace.
+    //
     if (c == ',')
     {
       c = next (json);
       if (json->flags & JSON_FLAG_ERROR)
         return JSON_ERROR;
 
-      json->stack[json->stack_top].count++;
-
-      return read_value (json, c);
+      if ((json->flags & JSON_FLAG_JSON5) && c == ']')
+        ; // Fall through.
+      else
+      {
+        json->stack[json->stack_top].count++;
+        return read_value (json, c);
+      }
     }
 
     if (c == ']')
@@ -1001,7 +1009,8 @@ json_next (json_stream *json)
   {
     if (json->stack[json->stack_top].count == 0)
     {
-      /* No member name/value pairs yet. */
+      // No member name/value pairs yet.
+      //
       if (c == '}')
         return pop (json, c, JSON_OBJECT);
 
@@ -1018,23 +1027,31 @@ json_next (json_stream *json)
     }
     else if ((json->stack[json->stack_top].count % 2) == 0)
     {
-      /* Expecting comma followed by member name or closing brace. */
+      // Expecting comma followed by member name or closing brace.
+      //
+      // In JSON5 comma can be followed directly by the closing brace.
+      //
       if (c == ',')
       {
         c = next (json);
         if (json->flags & JSON_FLAG_ERROR)
           return JSON_ERROR;
 
-        json->stack[json->stack_top].count++;
+        if ((json->flags & JSON_FLAG_JSON5) && c == '}')
+          ; // Fall through.
+        else
+        {
+          json->stack[json->stack_top].count++;
 
-        enum json_type value = read_value (json, c);
-        if (value == JSON_STRING)
-          return value;
+          enum json_type value = read_value (json, c);
+          if (value == JSON_STRING)
+            return value;
 
-        if (value != JSON_ERROR)
-          json_error (json, "%s", "expected member name");
+          if (value != JSON_ERROR)
+            json_error (json, "%s", "expected member name");
 
-        return JSON_ERROR;
+          return JSON_ERROR;
+        }
       }
 
       if (c == '}')
@@ -1045,7 +1062,8 @@ json_next (json_stream *json)
     }
     else
     {
-      /* Expecting colon followed by value. */
+      // Expecting colon followed by value.
+      //
       if (c == ':')
       {
         c = next (json);
