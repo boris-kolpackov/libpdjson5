@@ -211,18 +211,13 @@ pushchar (json_stream *json, int c)
 static int
 init_string (json_stream *json)
 {
-  json->data.string_fill = 0;
+  json->data.string_size = 1024; // @@ Too large, make configurable?
+  json->data.string = (char *)json->alloc.malloc (json->data.string_size);
   if (json->data.string == NULL)
   {
-    json->data.string_size = 1024; // @@ Too large, make configurable?
-    json->data.string = (char *)json->alloc.malloc (json->data.string_size);
-    if (json->data.string == NULL)
-    {
-      json_error (json, "%s", "out of memory");
-      return -1;
-    }
+    json_error (json, "%s", "out of memory");
+    return -1;
   }
-  json->data.string[0] = '\0';
   return 0;
 }
 
@@ -563,8 +558,11 @@ read_utf8 (json_stream* json, int next_char)
 static enum json_type
 read_string (json_stream *json)
 {
-  if (init_string (json) != 0)
+  if (json->data.string == NULL && init_string (json) != 0)
     return JSON_ERROR;
+
+  json->data.string_fill = 0;
+  json->data.string[0] = '\0';
 
   while (1)
   {
@@ -646,15 +644,19 @@ read_digits (json_stream *json)
 static enum json_type
 read_number (json_stream *json, int c)
 {
+  if (json->data.string == NULL && init_string (json) != 0)
+    return JSON_ERROR;
+
+  json->data.string_fill = 0;
+  json->data.string[0] = '\0';
+
   if (pushchar (json, c) != 0)
     return JSON_ERROR;
 
   if (c == '-')
   {
     c = json->source.get (&json->source);
-    if (is_digit (c))
-      return read_number (json, c);
-    else
+    if (!is_digit (c))
     {
       if (c != EOF)
       {
@@ -667,8 +669,14 @@ read_number (json_stream *json, int c)
 
       return JSON_ERROR;
     }
+
+    if (pushchar (json, c) != 0)
+      return JSON_ERROR;
+
+    // Fall through.
   }
-  else if (strchr ("123456789", c) != NULL)
+
+  if (strchr ("123456789", c) != NULL)
   {
     c = json->source.peek (&json->source);
     if (is_digit (c))
@@ -892,7 +900,7 @@ read_value (json_stream *json, int c)
   case '8':
   case '9':
   case '-':
-    type = init_string (json) == 0 ? read_number (json, c) : JSON_ERROR;
+    type = read_number (json, c);
     break;
   default:
     type = JSON_ERROR;
