@@ -1,9 +1,3 @@
-: integer
-:
-$* <"  1024$\n" >>EOO
-  1,  3: 1024
-EOO
-
 : true
 :
 $* <"  true $\n" >>EOO
@@ -20,6 +14,20 @@ EOO
 :
 $* <"$\tnull" >>EOO
   1,  2: <null>
+EOO
+
+: number
+:
+$* --streaming <<EOI >>EOO
+  1024
+1
+-1
+-11
+EOI
+  1,  3: 1024
+  2,  1: 1
+  3,  1: -1
+  4,  1: -11
 EOO
 
 : string
