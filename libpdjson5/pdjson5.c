@@ -906,6 +906,19 @@ read_value (json_stream *json, int c)
   return type;
 }
 
+static enum json_type
+read_name (json_stream *json, int c)
+{
+  enum json_type value = read_value (json, c);
+  if (value == JSON_STRING)
+    return value;
+
+  if (value != JSON_ERROR)
+    json_error (json, "%s", "expected member name");
+
+  return JSON_ERROR;
+}
+
 enum json_type
 json_peek (json_stream *json)
 {
@@ -1016,14 +1029,7 @@ json_next (json_stream *json)
 
       json->stack[json->stack_top].count++;
 
-      enum json_type value = read_value (json, c);
-      if (value == JSON_STRING)
-        return value;
-
-      if (value != JSON_ERROR)
-        json_error (json, "%s", "expected member name or '}'");
-
-      return JSON_ERROR;
+      return read_name (json, c);
     }
     else if ((json->stack[json->stack_top].count % 2) == 0)
     {
@@ -1043,14 +1049,7 @@ json_next (json_stream *json)
         {
           json->stack[json->stack_top].count++;
 
-          enum json_type value = read_value (json, c);
-          if (value == JSON_STRING)
-            return value;
-
-          if (value != JSON_ERROR)
-            json_error (json, "%s", "expected member name");
-
-          return JSON_ERROR;
+          return read_name (json, c);
         }
       }
 
