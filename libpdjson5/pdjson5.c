@@ -424,12 +424,6 @@ read_escaped (json_stream *json)
 }
 
 static int
-char_needs_escaping (int c)
-{
-  return (c >= 0) && (c < 0x20 || c == 0x22 || c == 0x5c) ? 1 : 0;
-}
-
-static int
 utf8_seq_length (char byte)
 {
   unsigned char u = (unsigned char) byte;
@@ -438,8 +432,6 @@ utf8_seq_length (char byte)
 
   if (0x80 <= u && u <= 0xBF)
   {
-    // @@ C comments?
-
     // second, third or fourth byte of a multi-byte
     // sequence, i.e. a "continuation byte"
     return 0;
@@ -557,7 +549,7 @@ read_utf8 (json_stream* json, int next_char)
 }
 
 static enum json_type
-read_string (json_stream *json)
+read_string (json_stream *json, int quote)
 {
   if (json->data.string == NULL && init_string (json) != 0)
     return JSON_ERROR;
@@ -572,7 +564,7 @@ read_string (json_stream *json)
       json_error (json, "%s", "unterminated string literal");
       return JSON_ERROR;
     }
-    else if (c == '"')
+    else if (c == quote)
     {
       if (pushchar (json, '\0') == 0)
         return JSON_STRING;
@@ -591,7 +583,7 @@ read_string (json_stream *json)
     }
     else
     {
-      if (char_needs_escaping (c))
+      if (c >= 0 && c < 0x20)
       {
         json_error (json, "%s", "unescaped control character in string");
         return JSON_ERROR;
@@ -863,7 +855,7 @@ read_value (json_stream *json, int c)
 
   json->ntokens++;
 
-  enum json_type type;
+  enum json_type type = (enum json_type)0;
   switch (c)
   {
   case EOF:
@@ -876,8 +868,12 @@ read_value (json_stream *json, int c)
   case '[':
     type = push (json, JSON_ARRAY);
     break;
+  case '\'':
+    if (!(json->flags & JSON_FLAG_JSON5))
+      break;
+    // Fall through.
   case '"':
-    type = read_string (json);
+    type = read_string (json, c);
     break;
   case 'n':
     type = is_match (json, "ull", JSON_NULL);
@@ -902,9 +898,13 @@ read_value (json_stream *json, int c)
     type = read_number (json, c);
     break;
   default:
-    type = JSON_ERROR;
-    json_error (json, "unexpected byte '%c' in value", c);
     break;
+  }
+
+  if (type == 0)
+  {
+    json_error (json, "unexpected byte '%c' in value", c);
+    type = JSON_ERROR;
   }
 
   if (type != JSON_ERROR)
@@ -920,9 +920,10 @@ read_name (json_stream *json, int c)
 
   json->ntokens++;
 
-  if (c == '"')
+  if (c == '"' || ((json->flags & JSON_FLAG_JSON5) &&
+                   c == '\''))
   {
-    if (read_string (json) == JSON_ERROR)
+    if (read_string (json, c) == JSON_ERROR)
       return JSON_ERROR;
   }
   // See if this is an unquoted member name.
