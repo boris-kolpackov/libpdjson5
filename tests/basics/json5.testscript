@@ -1,5 +1,28 @@
 test.options = --json5
 
+: single-quoted
+:
+{{
+  : basics
+  :
+  $* <<EOI >>EOO
+  {
+    'foo "fox" bar': 'bar "baz" foo'
+  }
+  EOI
+    1,  1: {
+    2,  3:   foo "fox" bar
+    2, 20:   "bar "baz" foo"
+    3,  1: }
+  EOO
+
+  : unterminated
+  :
+  $* <:"'foo\"" 2>>EOE !=0
+  <stdin>:1:5: error: unterminated string literal
+  EOE
+}}
+
 : unquoted
 :
 {{
