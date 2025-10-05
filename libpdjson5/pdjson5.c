@@ -395,7 +395,8 @@ read_escaped (json_stream *json)
   {
     if (read_unicode (json) != 0)
       return -1;
-  } else
+  }
+  else
   {
     switch (c)
     {
@@ -858,11 +859,11 @@ next (json_stream *json)
 static enum json_type
 read_value (json_stream *json, int c)
 {
-  enum json_type type;
   size_t colno = json_get_column (json);
 
   json->ntokens++;
 
+  enum json_type type;
   switch (c)
   {
   case EOF:
@@ -915,53 +916,60 @@ read_value (json_stream *json, int c)
 static enum json_type
 read_name (json_stream *json, int c)
 {
+  size_t colno = json_get_column (json);
+
+  json->ntokens++;
+
   if (c == '"')
-    return read_value (json, c); // Can only be JSON_STRING or JSON_ERROR.
-
-  if (json->flags & JSON_FLAG_JSON5)
   {
-    // See if this is an unquoted member name.
-    //
-    // While the JSON5 spec says it can be anything that matches the
-    // ECMAScript's IdentifierName production, this brings all kinds of
-    // Unicode complications (and allows `$` anywhere in the identifier).
-    // So for now we restrict it to the C identifier in the ASCII alphabet.
-    //
-    if (c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+    if (read_string (json) == JSON_ERROR)
+      return JSON_ERROR;
+  }
+  // See if this is an unquoted member name.
+  //
+  // While the JSON5 spec says it can be anything that matches the
+  // ECMAScript's IdentifierName production, this brings all kinds of
+  // Unicode complications (and allows `$` anywhere in the identifier).
+  // So for now we restrict it to the C identifier in the ASCII alphabet.
+  //
+  else if ((json->flags & JSON_FLAG_JSON5) &&
+           (c == '_'               ||
+            (c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z')))
+  {
+    if (json->data.string == NULL && init_string (json) != 0)
+      return JSON_ERROR;
+
+    json->data.string_fill = 0;
+
+    while (true)
     {
-      if (json->data.string == NULL && init_string (json) != 0)
+      if (pushchar (json, c) != 0)
         return JSON_ERROR;
 
-      json->data.string_fill = 0;
+      c = json->source.peek (&json->source);
 
-      size_t colno = json_get_column (json);
+      if (!(c == '_'               ||
+            (c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9')))
+        break;
 
-      while (true)
-      {
-        if (pushchar (json, c) != 0)
-          return JSON_ERROR;
-
-        c = json->source.peek (&json->source);
-
-        if (!(c == '_'               ||
-              (c >= 'a' && c <= 'z') ||
-              (c >= 'A' && c <= 'Z') ||
-              (c >= '0' && c <= '9')))
-          break;
-
-        json->source.get (&json->source);
-      }
-
-      if (pushchar (json, '\0') != 0)
-        return JSON_ERROR;
-
-      json->colno = colno;
-      return JSON_STRING;
+      json->source.get (&json->source);
     }
+
+    if (pushchar (json, '\0') != 0)
+      return JSON_ERROR;
+  }
+  else
+  {
+    json_error (json, "%s", "expected member name");
+    return JSON_ERROR;
   }
 
-  json_error (json, "%s", "expected member name");
-  return JSON_ERROR;
+  json->colno = colno;
+
+  return JSON_STRING;
 }
 
 enum json_type
