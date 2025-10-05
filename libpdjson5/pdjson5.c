@@ -562,9 +562,8 @@ read_string (json_stream *json)
     return JSON_ERROR;
 
   json->data.string_fill = 0;
-  json->data.string[0] = '\0';
 
-  while (1)
+  while (true)
   {
     int c = json->source.get (&json->source);
     if (c == EOF)
@@ -648,7 +647,6 @@ read_number (json_stream *json, int c)
     return JSON_ERROR;
 
   json->data.string_fill = 0;
-  json->data.string[0] = '\0';
 
   if (pushchar (json, c) != 0)
     return JSON_ERROR;
@@ -917,13 +915,52 @@ read_value (json_stream *json, int c)
 static enum json_type
 read_name (json_stream *json, int c)
 {
-  enum json_type value = read_value (json, c);
-  if (value == JSON_STRING)
-    return value;
+  if (c == '"')
+    return read_value (json, c); // Can only be JSON_STRING or JSON_ERROR.
 
-  if (value != JSON_ERROR)
-    json_error (json, "%s", "expected member name");
+  if (json->flags & JSON_FLAG_JSON5)
+  {
+    // See if this is an unquoted member name.
+    //
+    // While the JSON5 spec says it can be anything that matches the
+    // ECMAScript's IdentifierName production, this brings all kinds of
+    // Unicode complications (and allows `$` anywhere in the identifier).
+    // So for now we restrict it to the C identifier in the ASCII alphabet.
+    //
+    if (c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+    {
+      if (json->data.string == NULL && init_string (json) != 0)
+        return JSON_ERROR;
 
+      json->data.string_fill = 0;
+
+      size_t colno = json_get_column (json);
+
+      while (true)
+      {
+        if (pushchar (json, c) != 0)
+          return JSON_ERROR;
+
+        c = json->source.peek (&json->source);
+
+        if (!(c == '_'               ||
+              (c >= 'a' && c <= 'z') ||
+              (c >= 'A' && c <= 'Z') ||
+              (c >= '0' && c <= '9')))
+          break;
+
+        json->source.get (&json->source);
+      }
+
+      if (pushchar (json, '\0') != 0)
+        return JSON_ERROR;
+
+      json->colno = colno;
+      return JSON_STRING;
+    }
+  }
+
+  json_error (json, "%s", "expected member name");
   return JSON_ERROR;
 }
 
@@ -1131,7 +1168,7 @@ json_skip (json_stream *json)
 enum json_type
 json_skip_until (json_stream *json, enum json_type type)
 {
-  while (1)
+  while (true)
   {
     enum json_type skip = json_skip (json);
 
