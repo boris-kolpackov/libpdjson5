@@ -163,29 +163,6 @@ init (json_stream *json)
   json->alloc.free = free;
 }
 
-static enum json_type
-is_match (json_stream *json, const char *pattern, enum json_type type)
-{
-  int c;
-  for (const char *p = pattern; *p; p++)
-  {
-    if (*p != (c = json->source.get (&json->source)))
-    {
-      if (c != EOF)
-      {
-        json_error (json, "expected '%c' instead of byte '%c'", *p, c);
-      }
-      else
-      {
-        json_error (json, "expected '%c' instead of end of text", *p);
-      }
-
-      return JSON_ERROR;
-    }
-  }
-  return type;
-}
-
 static int
 pushchar (json_stream *json, int c)
 {
@@ -206,6 +183,45 @@ pushchar (json_stream *json, int c)
   }
   json->data.string[json->data.string_fill++] = c;
   return 0;
+}
+
+static enum json_type
+is_match (json_stream *json,
+          const char *pattern,
+          bool copy,
+          enum json_type type)
+{
+  int c;
+  for (const char *p = pattern; *p; p++)
+  {
+    if (*p != (c = json->source.get (&json->source)))
+    {
+      if (c != EOF)
+      {
+        json_error (json, "expected '%c' instead of byte '%c'", *p, c);
+      }
+      else
+      {
+        json_error (json, "expected '%c' instead of end of text", *p);
+      }
+
+      return JSON_ERROR;
+    }
+
+    if (copy)
+    {
+      if (pushchar (json, c) != 0)
+        return JSON_ERROR;
+    }
+  }
+
+  if (copy)
+  {
+    if (pushchar (json, '\0') != 0)
+      return JSON_ERROR;
+  }
+
+  return type;
 }
 
 static int
@@ -814,7 +830,15 @@ read_number (json_stream *json, int c)
   if (c == '-' || c == '+')
   {
     c = json->source.get (&json->source);
-    if (!is_dec_digit (c))
+    if (is_dec_digit (c) ||
+        ((c == 'I' || c == 'N') && (json->flags & JSON_FLAG_JSON5)))
+    {
+      if (pushchar (json, c) != 0)
+        return JSON_ERROR;
+
+      // Fall through.
+    }
+    else
     {
       if (c != EOF)
       {
@@ -827,11 +851,6 @@ read_number (json_stream *json, int c)
 
       return JSON_ERROR;
     }
-
-    if (pushchar (json, c) != 0)
-      return JSON_ERROR;
-
-    // Fall through.
   }
 
   if (c >= '1' && c <= '9')
@@ -862,6 +881,12 @@ read_number (json_stream *json, int c)
     json_error (json, "%s", "leading '0' in number");
     return JSON_ERROR;
   }
+  // Note that we can only get `I` and `N` here if we are in the JSON5 mode.
+  //
+  else if (c == 'I')
+    return is_match (json, "nfinity", true /* copy */, JSON_NUMBER);
+  else if (c == 'N')
+    return is_match (json, "aN", true /* copy */, JSON_NUMBER);
 
   /* Up to decimal or exponent has been read. */
   c = json->source.peek (&json->source);
@@ -1060,15 +1085,17 @@ read_value (json_stream *json, int c)
     type = read_string (json, c);
     break;
   case 'n':
-    type = is_match (json, "ull", JSON_NULL);
+    type = is_match (json, "ull", false /* copy */, JSON_NULL);
     break;
   case 'f':
-    type = is_match (json, "alse", JSON_FALSE);
+    type = is_match (json, "alse", false /* copy */, JSON_FALSE);
     break;
   case 't':
-    type = is_match (json, "rue", JSON_TRUE);
+    type = is_match (json, "rue", false /* copy */, JSON_TRUE);
     break;
   case '+':
+  case 'I': // Infinity
+  case 'N': // NaN
     if (!(json->flags & JSON_FLAG_JSON5))
       break;
     // Fall through.
