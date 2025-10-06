@@ -1,5 +1,48 @@
 test.options = --json5
 
+: escape
+:
+{{
+  : basics
+  :
+  $* --streaming <<EOI >>"EOO"
+  "\n"
+  '\''
+  "\x5c"
+  "a\
+  b"
+  "\A\C/\D\C"
+  EOI
+    1,  1: "$\n"
+    2,  1: "'"
+    3,  1: "\\"
+    4,  1: "ab"
+    5,  1: "AC/DC"
+  EOO
+
+  : pass-control
+  :
+  $* <"'$\b\\$\b'" >"  1,  1: \"$\b$\b\""
+
+  : crlf-line-continuation
+  :
+  $* <"'a\\$\r$\nb'" >>EOO
+    1,  1: "ab"
+  EOO
+
+  : digit
+  :
+  $* <'"\1"' 2>>EOE !=0
+  <stdin>:1:3: error: invalid escaped byte '1'
+  EOE
+
+  : digit-after-zero
+  :
+  $* <'"\01"' 2>>EOE !=0
+  <stdin>:1:4: error: invalid escaped byte '1'
+  EOE
+}}
+
 : single-quoted
 :
 {{
