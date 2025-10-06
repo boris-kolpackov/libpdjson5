@@ -123,6 +123,6 @@ EOE
   : Invalid byte
   :
   $* <'"\u0MA2"' 2>>EOE != 0
-  <stdin>:1:5: error: invalid escape Unicode byte 'M'
+  <stdin>:1:5: error: invalid escape Unicode escape byte 'M'
   EOE
 }}

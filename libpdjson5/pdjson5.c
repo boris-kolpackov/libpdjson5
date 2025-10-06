@@ -291,6 +291,8 @@ hexchar (int c)
   }
 }
 
+// Read 4-digit hex number in \uHHHH.
+//
 static long
 read_unicode_cp (json_stream *json)
 {
@@ -304,12 +306,12 @@ read_unicode_cp (json_stream *json)
 
     if (c == EOF)
     {
-      json_error (json, "%s", "unterminated string literal in Unicode");
+      json_error (json, "%s", "unterminated string literal in Unicode escape");
       return -1;
     }
     else if ((hc = hexchar (c)) == -1)
     {
-      json_error (json, "invalid escape Unicode byte '%c'", c);
+      json_error (json, "invalid escape Unicode escape byte '%c'", c);
       return -1;
     }
 
@@ -382,6 +384,48 @@ read_unicode (json_stream *json)
   return encode_utf8 (json, cp);
 }
 
+// Read 4-digit hex number in \xHH.
+//
+static long
+read_latin_cp (json_stream *json)
+{
+  long cp = 0;
+  int shift = 4;
+
+  for (size_t i = 0; i < 2; i++)
+  {
+    int c = json->source.get (&json->source);
+    int hc;
+
+    if (c == EOF)
+    {
+      json_error (json, "%s", "unterminated string literal in Latin escape");
+      return -1;
+    }
+    else if ((hc = hexchar (c)) == -1)
+    {
+      json_error (json, "invalid escape Latin escape byte '%c'", c);
+      return -1;
+    }
+
+    cp += hc * (1 << shift);
+    shift -= 4;
+  }
+
+  return cp;
+}
+
+static int
+read_latin (json_stream *json)
+{
+  long cp;
+
+  if ((cp = read_latin_cp (json)) == -1)
+    return -1;
+
+  return encode_utf8 (json, cp);
+}
+
 static int
 read_escaped (json_stream *json)
 {
@@ -391,36 +435,105 @@ read_escaped (json_stream *json)
     json_error (json, "%s", "unterminated string literal in escape");
     return -1;
   }
-  else if (c == 'u')
+
+  // JSON escapes.
+  //
+
+  if (c == 'u') // \xHHHH
+    return read_unicode (json);
+
+  int u = -1;
+  switch (c)
   {
-    if (read_unicode (json) != 0)
-      return -1;
+  case '\\': u = c;    break;
+  case 'b':  u = '\b'; break;
+  case 'f':  u = '\f'; break;
+  case 'n':  u = '\n'; break;
+  case 'r':  u = '\r'; break;
+  case 't':  u = '\t'; break;
+  case '/':  u = c;    break;
+  case '"':  u = c;    break;
   }
-  else
+
+  // Additional JSON5 escapes.
+  //
+  if (u == -1 && (json->flags & JSON_FLAG_JSON5))
   {
+    if (c == 'x') // \xHH
+      return read_latin (json);
+
+    // According to the JSON5 spec (Section 5.1):
+    //
+    // "A decimal digit must not follow a reverse solidus followed by a
+    // zero. [...] If any other character follows a reverse solidus, except
+    // for the decimal digits 1 through 9, that character will be included in
+    // the string, but the reverse solidus will not."
+    //
+    // So it appears:
+    //
+    // 1. \0N is not allowed.
+    // 2. \N is not allowed either.
+    // 3. Raw control characters can appear after `\`.
+    //
+    // The reference implementation appears to match this understanding.
+    //
     switch (c)
     {
-    case '\\':
-    case 'b':
-    case 'f':
-    case 'n':
-    case 'r':
-    case 't':
-    case '/':
-    case '"':
+    case '\'': u = c;    break;
+    case 'v':  u = '\v'; break;
+
+    case '0':
+      // Check that it's not followed by a digit (see above).
+      //
+      c = json->source.peek (&json->source);
+      if (c >= '0' && c <= '9')
       {
-        const char *codes = "\\bfnrt/\"";
-        const char *p = strchr (codes, c);
-        if (pushchar (json, "\\\b\f\n\r\t/\""[p - codes]) != 0)
-          return -1;
-        break;
+        json->source.get (&json->source);
+        u = -1;
       }
+      else
+        u = '\0';
+      break;
+
+      // Decimal digits (other that 0) are illegal (see above).
+      //
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':  u = -1; break;
+
+      // Line continuations.
+      //
+    case '\r':
+      // Check if it's followed by \n (CRLF).
+      //
+      if (json->source.peek (&json->source) == '\n')
+        json->source.get (&json->source);
+
+      // Fall through.
+    case '\n':
+    case 0x2028:
+    case 0x2029:
+      return 0; // No pushchar().
+
     default:
-      json_error (json, "invalid escaped byte '%c'", c);
-      return -1;
+      // Pass as-is, including the control characters (see above).
+      //
+      u = c;
+      break;
     }
   }
-  return 0;
+
+  if (u != -1)
+    return pushchar (json, u);
+
+  json_error (json, "invalid escaped byte '%c'", c);
+  return -1;
 }
 
 static int
@@ -583,7 +696,22 @@ read_string (json_stream *json, int quote)
     }
     else
     {
-      if (c >= 0 && c < 0x20)
+      // According to the JSON5 spec (Chapter 5):
+      //
+      // "All Unicode characters may be placed within the quotation marks,
+      // except for the characters that must be escaped: the quotation mark
+      // used to begin and end the string, reverse solidus, and line
+      // terminators."
+      //
+      // So it appears this includes the raw control characters (except
+      // newlines). The reference implementation appears to match this
+      // understanding.
+      //
+      // Note: quote and backslash are handled above.
+      //
+      if ((json->flags & JSON_FLAG_JSON5)
+          ? (c == '\n' || c == '\r')
+          : (c >= 0 && c < 0x20))
       {
         json_error (json, "%s", "unescaped control character in string");
         return JSON_ERROR;
