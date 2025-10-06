@@ -1,5 +1,19 @@
 test.options = --json5
 
+: number
+:
+{{
+  : plus
+  :
+  $* <'+123' >'  1,  1: +123'
+
+  : plus-alone
+  :
+  $* <'+ 123' 2>>EOE !=0
+  <stdin>:1:2: error: unexpected byte ' ' in number
+  EOE
+}}
+
 : escape
 :
 {{

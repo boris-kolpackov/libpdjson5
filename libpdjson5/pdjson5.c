@@ -772,7 +772,9 @@ read_number (json_stream *json, int c)
   if (pushchar (json, c) != 0)
     return JSON_ERROR;
 
-  if (c == '-')
+  // Note: we can only have '+' here if we are in the JSON5 mode.
+  //
+  if (c == '-' || c == '+')
   {
     c = json->source.get (&json->source);
     if (!is_digit (c))
@@ -1012,6 +1014,11 @@ read_value (json_stream *json, int c)
   case 't':
     type = is_match (json, "rue", JSON_TRUE);
     break;
+  case '+':
+    if (!(json->flags & JSON_FLAG_JSON5))
+      break;
+    // Fall through.
+  case '-':
   case '0':
   case '1':
   case '2':
@@ -1022,7 +1029,6 @@ read_value (json_stream *json, int c)
   case '7':
   case '8':
   case '9':
-  case '-':
     type = read_number (json, c);
     break;
   default:
