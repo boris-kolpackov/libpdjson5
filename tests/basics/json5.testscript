@@ -38,6 +38,46 @@ test.options = --json5
   $* <'0xG' 2>>EOE !=0
   <stdin>:1:2: error: expected hex digit instead of byte 'G'
   EOE
+
+  : infinity
+  :
+  $* --streaming <<EOI >>EOO
+  Infinity
+  -Infinity
+  +Infinity
+  EOI
+    1,  1: Infinity
+    2,  1: -Infinity
+    3,  1: +Infinity
+  EOO
+
+  : infinity-bad
+  :
+  $* <<EOI 2>>EOE !=0
+  -Infinty
+  EOI
+  <stdin>:1:7: error: expected 'i' instead of byte 't'
+  EOE
+
+  : nan
+  :
+  $* --streaming <<EOI >>EOO
+  NaN
+  -NaN
+  +NaN
+  EOI
+    1,  1: NaN
+    2,  1: -NaN
+    3,  1: +NaN
+  EOO
+
+  : nan-bad
+  :
+  $* <<EOI 2>>EOE !=0
+  -Nan
+  EOI
+  <stdin>:1:4: error: expected 'N' instead of byte 'n'
+  EOE
 }}
 
 : escape
