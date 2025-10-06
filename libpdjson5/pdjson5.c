@@ -679,10 +679,7 @@ read_string (json_stream *json, int quote)
     }
     else if (c == quote)
     {
-      if (pushchar (json, '\0') == 0)
-        return JSON_STRING;
-      else
-        return JSON_ERROR;
+      return pushchar (json, '\0') == 0 ? JSON_STRING : JSON_ERROR;
     }
     else if (c == '\\')
     {
@@ -728,7 +725,7 @@ read_string (json_stream *json, int quote)
 static int
 is_digit (int c)
 {
-  return c >= 48 /*0*/ && c <= 57 /*9*/;
+  return c >= '0' && c <= '9';
 }
 
 static int
@@ -797,7 +794,11 @@ read_number (json_stream *json, int c)
     // Fall through.
   }
 
-  if (strchr ("123456789", c) != NULL)
+  // Note that while the JSON5 spec doesn't say whether leading
+  // 0 is illegal, the reference implementation appears to reject
+  // it. So we assume it is.
+  //
+  if (c >= '1' && c <= '9')
   {
     c = json->source.peek (&json->source);
     if (is_digit (c))
@@ -809,19 +810,18 @@ read_number (json_stream *json, int c)
 
   /* Up to decimal or exponent has been read. */
   c = json->source.peek (&json->source);
-  if (strchr (".eE", c) == NULL)
+  if (c != '.' && c != 'e' && c != 'E')
   {
-    if (pushchar (json, '\0') != 0)
-      return JSON_ERROR;
-    else
-      return JSON_NUMBER;
+    return pushchar (json, '\0') == 0 ? JSON_NUMBER : JSON_ERROR;
   }
 
   if (c == '.')
   {
-    json->source.get (&json->source); // consume .
+    json->source.get (&json->source); // consume `.`.
+
     if (pushchar (json, c) != 0)
       return JSON_ERROR;
+
     if (read_digits (json) != 0)
       return JSON_ERROR;
   }
@@ -830,16 +830,18 @@ read_number (json_stream *json, int c)
   c = json->source.peek (&json->source);
   if (c == 'e' || c == 'E')
   {
-    json->source.get (&json->source); // consume e/E
+    json->source.get (&json->source); // Consume `e`/`E`.
     if (pushchar (json, c) != 0)
       return JSON_ERROR;
 
     c = json->source.peek (&json->source);
     if (c == '+' || c == '-')
     {
-      json->source.get (&json->source); // consume
+      json->source.get (&json->source); // Consume `+`/`-`.
+
       if (pushchar (json, c) != 0)
         return JSON_ERROR;
+
       if (read_digits (json) != 0)
         return JSON_ERROR;
     }
@@ -850,7 +852,7 @@ read_number (json_stream *json, int c)
     }
     else
     {
-      json->source.get (&json->source); // consume (for column)
+      json->source.get (&json->source); // Consume (for column).
       if (c != EOF)
       {
         json_error (json, "unexpected byte '%c' in number", c);
@@ -864,10 +866,7 @@ read_number (json_stream *json, int c)
     }
   }
 
-  if (pushchar (json, '\0') != 0)
-    return JSON_ERROR;
-  else
-    return JSON_NUMBER;
+  return pushchar (json, '\0') == 0 ? JSON_NUMBER : JSON_ERROR;
 }
 
 bool
