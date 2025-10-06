@@ -12,6 +12,32 @@ test.options = --json5
   $* <'+ 123' 2>>EOE !=0
   <stdin>:1:2: error: unexpected byte ' ' in number
   EOE
+
+  : hex
+  :
+  $* --streaming <<EOI >>EOO
+  0x00
+  0XdeCAFF
+  -0xff
+  +0xEE
+  EOI
+    1,  1: 0x00
+    2,  1: 0XdeCAFF
+    3,  1: -0xff
+    4,  1: +0xEE
+  EOO
+
+  : hex-prefix-only
+  :
+  $* <:'0x' 2>>EOE !=0
+  <stdin>:1:2: error: expected hex digit instead of end of text
+  EOE
+
+  : hex-bad-digit
+  :
+  $* <'0xG' 2>>EOE !=0
+  <stdin>:1:2: error: expected hex digit instead of byte 'G'
+  EOE
 }}
 
 : escape

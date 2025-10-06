@@ -723,19 +723,20 @@ read_string (json_stream *json, int quote)
 }
 
 static int
-is_digit (int c)
+is_dec_digit (int c)
 {
   return c >= '0' && c <= '9';
 }
 
 static int
-read_digits (json_stream *json)
+read_dec_digits (json_stream *json)
 {
   int c;
-  unsigned int nread = 0;
-  while (is_digit (c = json->source.peek (&json->source)))
+  size_t nread = 0;
+  while (is_dec_digit (c = json->source.peek (&json->source)))
   {
-    if (pushchar (json, json->source.get (&json->source)) != 0)
+    json->source.get (&json->source);
+    if (pushchar (json, c) != 0)
       return -1;
 
     nread++;
@@ -750,6 +751,45 @@ read_digits (json_stream *json)
     else
     {
       json_error (json, "%s", "expected digit instead of end of text");
+    }
+
+    return -1;
+  }
+
+  return 0;
+}
+
+static int
+is_hex_digit (int c)
+{
+  return ((c >= '0' && c <= '9') ||
+          (c >= 'a' && c <= 'f') ||
+          (c >= 'A' && c <= 'F'));
+}
+
+static int
+read_hex_digits (json_stream *json)
+{
+  int c;
+  size_t nread = 0;
+  while (is_hex_digit (c = json->source.peek (&json->source)))
+  {
+    json->source.get (&json->source);
+    if (pushchar (json, c) != 0)
+      return -1;
+
+    nread++;
+  }
+
+  if (nread == 0)
+  {
+    if (c != EOF)
+    {
+      json_error (json, "expected hex digit instead of byte '%c'", c);
+    }
+    else
+    {
+      json_error (json, "%s", "expected hex digit instead of end of text");
     }
 
     return -1;
@@ -774,7 +814,7 @@ read_number (json_stream *json, int c)
   if (c == '-' || c == '+')
   {
     c = json->source.get (&json->source);
-    if (!is_digit (c))
+    if (!is_dec_digit (c))
     {
       if (c != EOF)
       {
@@ -794,18 +834,33 @@ read_number (json_stream *json, int c)
     // Fall through.
   }
 
-  // Note that while the JSON5 spec doesn't say whether leading
-  // 0 is illegal, the reference implementation appears to reject
-  // it. So we assume it is.
-  //
   if (c >= '1' && c <= '9')
   {
     c = json->source.peek (&json->source);
-    if (is_digit (c))
+    if (is_dec_digit (c))
     {
-      if (read_digits (json) != 0)
+      if (read_dec_digits (json) != 0)
         return JSON_ERROR;
     }
+  }
+  else if (c == '0')
+  {
+    // Note that while the JSON5 spec doesn't say whether leading 0 is
+    // illegal, the reference implementation appears to reject it. So we
+    // assume it is.
+    //
+    if ((json->flags & JSON_FLAG_JSON5) &&
+        ((c = json->source.peek (&json->source)) == 'x' || c == 'X'))
+    {
+      json->source.get (&json->source); // Consume `x`/`X'.
+
+      return (pushchar (json, c) == 0     &&
+              read_hex_digits (json) == 0 &&
+              pushchar (json, '\0') == 0) ? JSON_NUMBER : JSON_ERROR;
+    }
+
+    json_error (json, "%s", "leading '0' in number");
+    return JSON_ERROR;
   }
 
   /* Up to decimal or exponent has been read. */
@@ -817,12 +872,12 @@ read_number (json_stream *json, int c)
 
   if (c == '.')
   {
-    json->source.get (&json->source); // consume `.`.
+    json->source.get (&json->source); // Consume `.`.
 
     if (pushchar (json, c) != 0)
       return JSON_ERROR;
 
-    if (read_digits (json) != 0)
+    if (read_dec_digits (json) != 0)
       return JSON_ERROR;
   }
 
@@ -842,12 +897,12 @@ read_number (json_stream *json, int c)
       if (pushchar (json, c) != 0)
         return JSON_ERROR;
 
-      if (read_digits (json) != 0)
+      if (read_dec_digits (json) != 0)
         return JSON_ERROR;
     }
-    else if (is_digit (c))
+    else if (is_dec_digit (c))
     {
-      if (read_digits (json) != 0)
+      if (read_dec_digits (json) != 0)
         return JSON_ERROR;
     }
     else
