@@ -1,3 +1,5 @@
+# @@ Incorporate into json.testscript.
+
 : basic
 :
 $* <<EOI >>EOO
@@ -51,7 +53,7 @@ EOE
 : wrong-letter
 :
 $* <'trux' 2>>EOE != 0
-<stdin>:1:4: error: expected 'e' instead of byte 'x'
+<stdin>:1:4: error: expected 'e' instead of byte 'x' in 'true'
 EOE
 
 : error-within-value
@@ -71,7 +73,7 @@ EOE
   : literal
   :
   $* <:'tru' 2>>EOE != 0
-  <stdin>:1:3: error: expected 'e' instead of end of text
+  <stdin>:1:3: error: expected 'e' instead of end of text in 'true'
   EOE
 }}
 

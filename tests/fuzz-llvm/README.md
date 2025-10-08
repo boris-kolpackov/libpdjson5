@@ -14,5 +14,5 @@ mkdir corpus
 It is, however, recommended to pre-initialize the corpus with some samples
 (both valid and invalid). For example, you could use the `test_parsing/`
 directory from [JSONTestSuite](https://github.com/nst/JSONTestSuite) as
-a starting corpus directory. And/or the json5/ subdirectory (which contains
-the JSON5 inputs extracted from other tests).
+a starting corpus directory. And/or the json5/ and json5e/ subdirectories
+(which contains the JSON5/JSON5E inputs extracted from other tests).

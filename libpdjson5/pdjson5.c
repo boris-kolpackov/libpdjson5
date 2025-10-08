@@ -12,9 +12,16 @@
 #  include "pdjson5.h"
 #endif
 
-#define JSON_FLAG_ERROR      0x01U
-#define JSON_FLAG_STREAMING  0x02U
-#define JSON_FLAG_JSON5      0x04U
+// Feature flags.
+//
+#define JSON_FLAG_STREAMING    0x01U
+#define JSON_FLAG_JSON5        0x02U
+#define JSON_FLAG_JSON5E       0x04U
+
+// Runtime state flags.
+//
+#define JSON_FLAG_ERROR        0x08U
+#define JSON_FLAG_IMPLIED_END  0x10U
 
 #if defined(_MSC_VER) && (_MSC_VER < 1900)
 
@@ -88,17 +95,18 @@ push (json_stream *json, enum json_type type)
   return type;
 }
 
-/* Note: c is assumed not to be EOF. */
 static enum json_type
-pop (json_stream *json, int c, enum json_type expected)
+pop (json_stream *json, enum json_type type)
 {
-  if (json->stack == NULL || json->stack[json->stack_top].type != expected)
-  {
-    json_error (json, "unexpected byte '%c'", c);
-    return JSON_ERROR;
-  }
+#if 0
+  assert (json->stack != NULL &&
+          json->stack[json->stack_top].type == (type == JSON_OBJECT_END
+                                                ? JSON_OBJECT
+                                                : JSON_ARRAY));
+#endif
+
   json->stack_top--;
-  return expected == JSON_ARRAY ? JSON_ARRAY_END : JSON_OBJECT_END;
+  return type;
 }
 
 static int
@@ -143,11 +151,14 @@ init (json_stream *json)
   json->linepos = 0;
   json->lineadj = 0;
   json->linecon = 0;
-  json->colno = 0;
+  json->start_lineno = 0;
+  json->start_colno = 0;
   json->flags = JSON_FLAG_STREAMING;
   json->errmsg[0] = '\0';
   json->ntokens = 0;
-  json->next = (enum json_type)0;
+  json->peek = (enum json_type)0;
+
+  json->pending.type = (enum json_type)0;
 
   json->stack = NULL;
   json->stack_top = (size_t)-1;
@@ -185,6 +196,9 @@ pushchar (json_stream *json, int c)
   return 0;
 }
 
+// Match the remainder of input assuming the first character in pattern
+// matched. If copy is true, also copy the remainder to the string buffer.
+//
 static enum json_type
 is_match (json_stream *json,
           const char *pattern,
@@ -192,17 +206,21 @@ is_match (json_stream *json,
           enum json_type type)
 {
   int c;
-  for (const char *p = pattern; *p; p++)
+  for (const char *p = pattern + 1; *p; p++)
   {
     if (*p != (c = json->source.get (&json->source)))
     {
       if (c != EOF)
       {
-        json_error (json, "expected '%c' instead of byte '%c'", *p, c);
+        json_error (json,
+                    "expected '%c' instead of byte '%c' in '%s'",
+                    *p, c, pattern);
       }
       else
       {
-        json_error (json, "expected '%c' instead of end of text", *p);
+        json_error (json,
+                    "expected '%c' instead of end of text in '%s'",
+                    *p, pattern);
       }
 
       return JSON_ERROR;
@@ -219,6 +237,55 @@ is_match (json_stream *json,
   {
     if (pushchar (json, '\0') != 0)
       return JSON_ERROR;
+  }
+
+  return type;
+}
+
+// Match the remainder of the string buffer assuming the first character in
+// pattern matched.
+//
+static enum json_type
+is_match_string (json_stream *json,
+                 const char *pattern,
+                 int nextc,           // First character after the string.
+                 size_t* colno,       // Adjusted in case of an error.
+                 enum json_type type)
+{
+  const char *string = json->data.string + 1;
+
+  int c;
+  size_t i = 0;
+  for (int p; (p = pattern[i + 1]); i++)
+  {
+    if (p != (c = string[i]))
+    {
+      if (c != '\0' || nextc != EOF)
+      {
+        json_error (json,
+                    "expected '%c' instead of byte '%c' in '%s'",
+                    p, (c != '\0' ? c : nextc), pattern);
+
+        *colno += i + 1; // Extra for the first character.
+      }
+      else
+      {
+        json_error (json,
+                    "expected '%c' instead of end of text in '%s'",
+                    p, pattern);
+
+        *colno += i; // Don't count EOF.
+      }
+
+      return JSON_ERROR;
+    }
+  }
+
+  if ((c = string[i]) != '\0')
+  {
+    json_error (json, "expected end of text instead of byte '%c'", c)
+    *colno += i + 1;
+    return JSON_ERROR;
   }
 
   return type;
@@ -738,7 +805,7 @@ read_string (json_stream *json, int quote)
   return JSON_ERROR;
 }
 
-static int
+static bool
 is_dec_digit (int c)
 {
   return c >= '0' && c <= '9';
@@ -775,7 +842,7 @@ read_dec_digits (json_stream *json)
   return 0;
 }
 
-static int
+static bool
 is_hex_digit (int c)
 {
   return ((c >= '0' && c <= '9') ||
@@ -866,7 +933,7 @@ read_number (json_stream *json, int c)
   {
     // Note that while the JSON5 spec doesn't say whether leading 0 is
     // illegal, the reference implementation appears to reject it. So we
-    // assume it is.
+    // assume it is (issue #58 in json5-spec).
     //
     if ((json->flags & JSON_FLAG_JSON5) &&
         ((c = json->source.peek (&json->source)) == 'x' || c == 'X'))
@@ -884,9 +951,9 @@ read_number (json_stream *json, int c)
   // Note that we can only get `I` and `N` here if we are in the JSON5 mode.
   //
   else if (c == 'I')
-    return is_match (json, "nfinity", true /* copy */, JSON_NUMBER);
+    return is_match (json, "Infinity", true /* copy */, JSON_NUMBER);
   else if (c == 'N')
-    return is_match (json, "aN", true /* copy */, JSON_NUMBER);
+    return is_match (json, "NaN", true /* copy */, JSON_NUMBER);
 
   /* Up to decimal or exponent has been read. */
   c = json->source.peek (&json->source);
@@ -973,13 +1040,69 @@ newline (json_stream *json)
   json->linecon = 0;
 }
 
-/* Returns the next non-whitespace (and non-comment, for JSON5) character in
- * the stream. This function can fail by returning EOF and setting the error
- * flag.
- *
- * Note that this is the only function (besides user-facing json_source_get())
- * that needs to worry about newline housekeeping.
- */
+// Given the peeked-at comment determinant character (`/` or `*`), skip
+// everything until the end of the comment (newline or `*/`) and return the
+// last character read. This function can fail by returning EOF and setting
+// the error flag.
+//
+static int
+skip_comment (json_stream *json, int c)
+{
+  switch (c)
+  {
+  case '/':
+    {
+      // Skip everything until the next newline or EOF.
+      //
+      while ((c = json->source.get (&json->source)) != EOF)
+      {
+        if (c == '\n')
+        {
+          newline (json);
+          break;
+        }
+      }
+
+      break;
+    }
+  case '*':
+    {
+      // Skip everything until closing `*/` or EOF.
+      //
+      json->source.get (&json->source); // Consume opening `*`.
+
+      while ((c = json->source.get (&json->source)) != EOF)
+      {
+        if (c == '*')
+        {
+          if (json->source.peek (&json->source) == '/')
+          {
+            c = json->source.get (&json->source); // Consume closing `/`.
+            break;
+          }
+        }
+        else if (c == '\n')
+          newline (json);
+      }
+
+      if (c == EOF)
+        json_error (json, "%s", "unexpected end of text before '*/'");
+
+      break;
+    }
+  }
+
+  return c;
+}
+
+// Returns the next non-whitespace (and non-comment, for JSON5) character in
+// the stream. This function can fail by returning EOF and setting the error
+// flag.
+//
+// Note that this and the peek() below are the only functions (besides the
+// user-facing json_source_get()) that need to worry about newline
+// housekeeping.
+//
 static int
 next (json_stream *json)
 {
@@ -996,65 +1119,44 @@ next (json_stream *json)
       continue;
     }
 
-    if (json->flags & JSON_FLAG_JSON5)
+    if (c == '/' && (json->flags & JSON_FLAG_JSON5))
     {
-      if (c == '/')
+      int p = json->source.peek (&json->source);
+      if (p == '/' || p == '*')
       {
-        switch (json->source.peek (&json->source))
-        {
-        case '/':
-          {
-            // Skip everything until the next newline or EOF.
-            //
-            while ((c = json->source.get (&json->source)) != EOF)
-            {
-              if (c == '\n')
-              {
-                newline (json);
-                break;
-              }
-            }
-
-            if (c != EOF)
-              continue;
-
-            break;
-          }
-        case '*':
-          {
-            // Skip everything until closing `*/` or EOF.
-            //
-            json->source.get (&json->source); // Consume opening `*`.
-
-            while ((c = json->source.get (&json->source)) != EOF)
-            {
-              if (c == '*')
-              {
-                if (json->source.peek (&json->source) == '/')
-                {
-                  c = json->source.get (&json->source); // Consume closing `/`.
-                  break;
-                }
-              }
-              else if (c == '\n')
-                newline (json);
-            }
-
-            if (c != EOF)
-              continue;
-
-            json_error (json, "%s", "unexpected end of text before '*/'");
-            break;
-          }
-        default:
-          break;
-        }
+        if ((c = skip_comment (json, p)) != EOF)
+          continue;
       }
     }
 
     break;
   }
   return c;
+}
+
+// As above but only peek at the non-whitespace character. Note that unlike
+// the above function, this version does not skip comments (since that would
+// require a two-character look-ahead). It also therefore cannot fail.
+//
+// Note: should not be used in the streaming mode since it may consume
+// value-separating whitespaces.
+//
+static int
+peek (json_stream *json)
+{
+  int c;
+  while (true)
+  {
+    c = json->source.peek (&json->source);
+
+    if (!json_isspace (c))
+      return c;
+
+    json->source.get (&json->source);
+
+    if (c == '\n')
+      newline (json);
+  }
 }
 
 static enum json_type
@@ -1085,13 +1187,13 @@ read_value (json_stream *json, int c)
     type = read_string (json, c);
     break;
   case 'n':
-    type = is_match (json, "ull", false /* copy */, JSON_NULL);
+    type = is_match (json, "null", false /* copy */, JSON_NULL);
     break;
   case 'f':
-    type = is_match (json, "alse", false /* copy */, JSON_FALSE);
+    type = is_match (json, "false", false /* copy */, JSON_FALSE);
     break;
   case 't':
-    type = is_match (json, "rue", false /* copy */, JSON_TRUE);
+    type = is_match (json, "true", false /* copy */, JSON_TRUE);
     break;
   case '+':
   case 'I': // Infinity
@@ -1123,9 +1225,60 @@ read_value (json_stream *json, int c)
   }
 
   if (type != JSON_ERROR)
-    json->colno = colno;
+    json->start_colno = colno;
 
   return type;
+}
+
+// While the JSON5 spec says an identifier can be anything that matches the
+// ECMAScript's IdentifierName production, this brings all kinds of Unicode
+// complications (and allows `$` anywhere in the identifier). So for now we
+// restrict it to the C identifier in the ASCII alphabet.
+//
+static bool
+is_first_id_char (int c)
+{
+  return (c == '_'               ||
+          (c >= 'a' && c <= 'z') ||
+          (c >= 'A' && c <= 'Z'));
+}
+
+static bool
+is_subseq_id_char (int c)
+{
+  return (c == '_'               ||
+          (c >= 'a' && c <= 'z') ||
+          (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9'));
+}
+
+// Read the remainder of an identifier given its first character.
+//
+static enum json_type
+read_identifier (json_stream *json, int c)
+{
+  if (json->data.string == NULL && init_string (json) != 0)
+    return JSON_ERROR;
+
+  json->data.string_fill = 0;
+
+  while (true)
+  {
+    if (pushchar (json, c) != 0)
+      return JSON_ERROR;
+
+    c = json->source.peek (&json->source);
+
+    if (!is_subseq_id_char (c))
+      break;
+
+    json->source.get (&json->source);
+  }
+
+  if (pushchar (json, '\0') != 0)
+    return JSON_ERROR;
+
+  return JSON_STRING;
 }
 
 static enum json_type
@@ -1143,38 +1296,9 @@ read_name (json_stream *json, int c)
   }
   // See if this is an unquoted member name.
   //
-  // While the JSON5 spec says it can be anything that matches the
-  // ECMAScript's IdentifierName production, this brings all kinds of
-  // Unicode complications (and allows `$` anywhere in the identifier).
-  // So for now we restrict it to the C identifier in the ASCII alphabet.
-  //
-  else if ((json->flags & JSON_FLAG_JSON5) &&
-           (c == '_'               ||
-            (c >= 'a' && c <= 'z') ||
-            (c >= 'A' && c <= 'Z')))
+  else if ((json->flags & JSON_FLAG_JSON5) && is_first_id_char (c))
   {
-    if (json->data.string == NULL && init_string (json) != 0)
-      return JSON_ERROR;
-
-    json->data.string_fill = 0;
-
-    while (true)
-    {
-      if (pushchar (json, c) != 0)
-        return JSON_ERROR;
-
-      c = json->source.peek (&json->source);
-
-      if (!(c == '_'               ||
-            (c >= 'a' && c <= 'z') ||
-            (c >= 'A' && c <= 'Z') ||
-            (c >= '0' && c <= '9')))
-        break;
-
-      json->source.get (&json->source);
-    }
-
-    if (pushchar (json, '\0') != 0)
+    if (read_identifier (json, c) == JSON_ERROR)
       return JSON_ERROR;
   }
   else
@@ -1183,7 +1307,7 @@ read_name (json_stream *json, int c)
     return JSON_ERROR;
   }
 
-  json->colno = colno;
+  json->start_colno = colno;
 
   return JSON_STRING;
 }
@@ -1191,12 +1315,12 @@ read_name (json_stream *json, int c)
 enum json_type
 json_peek (json_stream *json)
 {
-  enum json_type next;
-  if (json->next)
-    next = json->next;
+  enum json_type peek;
+  if (json->peek)
+    peek = json->peek;
   else
-    next = json->next = json_next (json);
-  return next;
+    peek = json->peek = json_next (json);
+  return peek;
 }
 
 enum json_type
@@ -1205,14 +1329,28 @@ json_next (json_stream *json)
   if (json->flags & JSON_FLAG_ERROR)
     return JSON_ERROR;
 
-  if (json->next != 0)
+  if (json->peek != 0)
   {
-    enum json_type next = json->next;
-    json->next = (enum json_type)0;
+    enum json_type next = json->peek;
+    json->peek = (enum json_type)0;
     return next;
   }
 
-  json->colno = 0;
+  if (json->pending.type != 0)
+  {
+    enum json_type next = json->pending.type;
+    json->pending.type = (enum json_type)0;
+    json->start_lineno = json->pending.lineno;
+    json->start_colno = json->pending.colno;
+
+    if (next == JSON_OBJECT_END || next == JSON_ARRAY_END)
+      next = pop (json, next);
+
+    return next;
+  }
+
+  json->start_lineno = 0;
+  json->start_colno = 0;
 
   if (json->ntokens > 0 && json->stack_top == (size_t)-1)
   {
@@ -1223,14 +1361,20 @@ json_next (json_stream *json)
      * value. */
     if (!(json->flags & JSON_FLAG_STREAMING))
     {
-      int c = next (json);
-      if (json->flags & JSON_FLAG_ERROR)
-        return JSON_ERROR;
-
-      if (c != EOF)
+      // If JSON_FLAG_IMPLIED_END is set here, then it means we have already
+      // seen EOF.
+      //
+      if (!(json->flags & JSON_FLAG_IMPLIED_END))
       {
-        json_error (json, "expected end of text instead of byte '%c'", c);
-        return JSON_ERROR;
+        int c = next (json);
+        if (json->flags & JSON_FLAG_ERROR)
+          return JSON_ERROR;
+
+        if (c != EOF)
+        {
+          json_error (json, "expected end of text instead of byte '%c'", c);
+          return JSON_ERROR;
+        }
       }
     }
 
@@ -1241,68 +1385,111 @@ json_next (json_stream *json)
   if (json->flags & JSON_FLAG_ERROR)
     return JSON_ERROR;
 
-  if (json->stack_top == (size_t)-1)
+  if (json->stack_top != (size_t)-1)
   {
-    if (c == EOF && (json->flags & JSON_FLAG_STREAMING))
-      return JSON_DONE;
-
-    return read_value (json, c);
-  }
-
-  if (json->stack[json->stack_top].type == JSON_ARRAY)
-  {
-    if (json->stack[json->stack_top].count == 0)
+    if (json->stack[json->stack_top].type == JSON_OBJECT)
     {
-      // No array values yet.
-      //
-      if (c == ']')
-        return pop (json, c, JSON_ARRAY);
+      if (json->stack[json->stack_top].count == 0)
+      {
+        // No member name/value pairs yet.
+        //
+        if (c == '}')
+          return pop (json, JSON_OBJECT_END);
 
-      json->stack[json->stack_top].count++;
-      return read_value (json, c);
-    }
+        json->stack[json->stack_top].count++;
 
-    // Expecting comma followed by array value or closing brace.
-    //
-    // In JSON5 comma can be followed directly by the closing brace.
-    //
-    if (c == ',')
-    {
-      c = next (json);
-      if (json->flags & JSON_FLAG_ERROR)
+        return read_name (json, c);
+      }
+      else if ((json->stack[json->stack_top].count % 2) == 0)
+      {
+        // Expecting comma followed by member name or closing brace.
+        //
+        // In JSON5 comma can be followed directly by the closing brace.
+        //
+        if (c == ',')
+        {
+          c = next (json);
+          if (json->flags & JSON_FLAG_ERROR)
+            return JSON_ERROR;
+
+          if ((json->flags & JSON_FLAG_JSON5) && c == '}')
+            ; // Fall through.
+          else
+          {
+            json->stack[json->stack_top].count++;
+
+            return read_name (json, c);
+          }
+        }
+
+        if (json->stack_top != 0 || !(json->flags & JSON_FLAG_IMPLIED_END))
+        {
+          if (c == '}')
+            return pop (json, JSON_OBJECT_END);
+
+          json_error (json, "%s", "expected ',' or '}' after member value");
+          return JSON_ERROR;
+        }
+
+        // Handle implied `}`.
+        //
+        if (c == EOF)
+        {
+          json->pending.type = JSON_DONE;
+          json->pending.lineno = 0;
+          json->pending.colno = 0;
+
+          return pop (json, JSON_OBJECT_END);
+        }
+
+        if (c == '}')
+        {
+          json_error (json, "%s", "explicit '}' in implied object");
+        }
+        else
+        {
+          json_error (json, "%s", "expected ',' after member value");
+        }
+
         return JSON_ERROR;
-
-      if ((json->flags & JSON_FLAG_JSON5) && c == ']')
-        ; // Fall through.
+      }
       else
       {
+        // Expecting colon followed by value.
+        //
+        if (c == ':')
+        {
+          c = next (json);
+          if (json->flags & JSON_FLAG_ERROR)
+            return JSON_ERROR;
+
+          json->stack[json->stack_top].count++;
+
+          return read_value (json, c);
+        }
+
+        json_error (json, "%s", "expected ':' after member name");
+        return JSON_ERROR;
+      }
+    }
+    else
+    {
+#if 0
+      assert (json->stack[json->stack_top].type == JSON_ARRAY);
+#endif
+
+      if (json->stack[json->stack_top].count == 0)
+      {
+        // No array values yet.
+        //
+        if (c == ']')
+          return pop (json, JSON_ARRAY_END);
+
         json->stack[json->stack_top].count++;
         return read_value (json, c);
       }
-    }
 
-    if (c == ']')
-      return pop (json, c, JSON_ARRAY);
-
-    json_error (json, "%s", "expected ',' or ']' after array value");
-    return JSON_ERROR;
-  }
-  else if (json->stack[json->stack_top].type == JSON_OBJECT)
-  {
-    if (json->stack[json->stack_top].count == 0)
-    {
-      // No member name/value pairs yet.
-      //
-      if (c == '}')
-        return pop (json, c, JSON_OBJECT);
-
-      json->stack[json->stack_top].count++;
-
-      return read_name (json, c);
-    }
-    else if ((json->stack[json->stack_top].count % 2) == 0)
-    {
-      // Expecting comma followed by member name or closing brace.
+      // Expecting comma followed by array value or closing brace.
       //
       // In JSON5 comma can be followed directly by the closing brace.
       //
@@ -1312,44 +1499,147 @@ json_next (json_stream *json)
         if (json->flags & JSON_FLAG_ERROR)
           return JSON_ERROR;
 
-        if ((json->flags & JSON_FLAG_JSON5) && c == '}')
+        if ((json->flags & JSON_FLAG_JSON5) && c == ']')
           ; // Fall through.
         else
         {
           json->stack[json->stack_top].count++;
-
-          return read_name (json, c);
+          return read_value (json, c);
         }
       }
 
-      if (c == '}')
-        return pop (json, c, JSON_OBJECT);
+      if (c == ']')
+        return pop (json, JSON_ARRAY_END);
 
-      json_error (json, "%s", "expected ',' or '}' after member value");
-      return JSON_ERROR;
-    }
-    else
-    {
-      // Expecting colon followed by value.
-      //
-      if (c == ':')
-      {
-        c = next (json);
-        if (json->flags & JSON_FLAG_ERROR)
-          return JSON_ERROR;
-
-        json->stack[json->stack_top].count++;
-
-        return read_value (json, c);
-      }
-
-      json_error (json, "%s", "expected ':' after member name");
+      json_error (json, "%s", "expected ',' or ']' after array value");
       return JSON_ERROR;
     }
   }
+  else
+  {
+    if (c == EOF && (json->flags & JSON_FLAG_STREAMING))
+      return JSON_DONE;
 
-  json_error (json, "%s", "invalid parser state");
-  return JSON_ERROR;
+    // Sniff out implied `{`.
+    //
+    // See below for the implied `}` injection.
+    //
+    // @@ TODO: move below to documentation.
+    //
+    // The object can be empty.
+    //
+    // Limitations:
+    //
+    // - Incompatible with the streaming mode.
+    // - No comments between the name and `:`.
+    // - Line/columns numbers for implied `{` and `}` are the first
+    //   member name and EOF, respectively.
+    //
+    //
+    if ((json->flags & JSON_FLAG_JSON5E) &&
+        !(json->flags & JSON_FLAG_STREAMING))
+    {
+      bool id;
+      if ((id = is_first_id_char (c)) || c == '"' || c == '\'')
+      {
+        size_t lineno = json_get_lineno (json);
+        size_t colno = json_get_column (json);
+
+        json->ntokens++;
+
+        if ((id
+             ? read_identifier (json, c)
+             : read_string (json, c)) == JSON_ERROR)
+          return JSON_ERROR;
+
+        enum json_type type;
+
+        int nc = json->source.peek (&json->source); // For diagnostics below.
+        if (peek (json) == ':')
+        {
+          json->pending.type = JSON_STRING;
+          json->pending.lineno = lineno;
+          json->pending.colno = colno;
+
+          json->flags |= JSON_FLAG_IMPLIED_END;
+
+          json->ntokens++; // For `{`.
+          type = push (json, JSON_OBJECT);
+
+          if (type != JSON_ERROR)
+            json->stack[json->stack_top].count++; // For pending name.
+        }
+        else
+        {
+          // Return as a string or one of the literal values.
+          //
+          // Note that we have ambiguity between, for example, `true` and
+          // `true_value`. But any continuation would be illegal so we resolve
+          // it in favor of a member name. However, if not followed by `:`, we
+          // need to diagnose identically to read_value () (both message and
+          // position-wide), which gets a bit tricky.
+          //
+          if (id)
+          {
+            switch ((c = json->data.string[0]))
+            {
+            case 'n':
+              type = is_match_string (json, "null", nc , &colno, JSON_NULL);
+              break;
+            case 't':
+              type = is_match_string (json, "true", nc , &colno, JSON_TRUE);
+              break;
+            case 'f':
+              type = is_match_string (json, "false", nc , &colno, JSON_FALSE);
+              break;
+            case 'I':
+              type = is_match_string (json, "Infinity", nc , &colno, JSON_NUMBER);
+              break;
+            case 'N':
+              type = is_match_string (json, "NaN", nc , &colno, JSON_NUMBER);
+              break;
+            default:
+              json_error (json, "unexpected byte '%c' in value", c);
+              type = JSON_ERROR;
+            }
+          }
+          else
+            type = JSON_STRING;
+        }
+
+        // Note: set even in case of an error since peek() above moved the
+        // position past the name/value.
+        //
+        json->lineno = lineno;
+        json->start_colno = colno;
+
+        return type;
+      }
+      else if (c == EOF)
+      {
+        // Allow empty implied objects (for example, all members commented
+        // out).
+        //
+        json->pending.type = JSON_OBJECT_END;
+        json->pending.lineno = 0;
+        json->pending.colno = 0;
+
+        json->flags |= JSON_FLAG_IMPLIED_END;
+
+        json->start_lineno = 1;
+        json->start_colno = 1;
+
+        // Note that we need to push an object entry into the stack to make
+        // sure json_get_context() works correctly.
+        //
+        json->ntokens++; // For `{`.
+        return push (json, JSON_OBJECT);
+      }
+      // Else fall through.
+    }
+
+    return read_value (json, c);
+  }
 }
 
 void
@@ -1357,7 +1647,7 @@ json_reset (json_stream *json)
 {
   json->stack_top = (size_t)-1;
   json->ntokens = 0;
-  json->flags &= ~JSON_FLAG_ERROR;
+  json->flags &= ~(JSON_FLAG_ERROR | JSON_FLAG_IMPLIED_END);
   json->errmsg[0] = '\0';
 }
 
@@ -1434,7 +1724,7 @@ json_get_error (json_stream *json)
 size_t
 json_get_lineno (json_stream *json)
 {
-  return json->lineno;
+  return json->start_lineno == 0 ? json->lineno : json->start_lineno;
 }
 
 size_t
@@ -1446,11 +1736,11 @@ json_get_position (json_stream *json)
 size_t
 json_get_column (json_stream *json)
 {
-  return json->colno == 0
+  return json->start_colno == 0
     ? (json->source.position == 0
        ? 1
        : json->source.position - json->linepos - json->lineadj)
-    : json->colno;
+    : json->start_colno;
 }
 
 size_t
@@ -1583,12 +1873,21 @@ json_set_streaming (json_stream *json, bool mode)
 }
 
 void
-json_set_json5 (json_stream *json, bool mode)
+json_set_language (json_stream *json, enum json_language language)
 {
-  if (mode)
+  switch (language)
+  {
+  case json_language_json:
+    json->flags &= ~(JSON_FLAG_JSON5 | JSON_FLAG_JSON5E);
+    break;
+  case json_language_json5:
+    json->flags &= ~JSON_FLAG_JSON5E;
     json->flags |= JSON_FLAG_JSON5;
-  else
-    json->flags &= ~JSON_FLAG_JSON5;
+    break;
+  case json_language_json5e:
+    json->flags |= JSON_FLAG_JSON5 | JSON_FLAG_JSON5E;
+    break;
+  }
 }
 
 void
