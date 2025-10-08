@@ -1233,14 +1233,16 @@ read_value (json_stream *json, int c)
 // While the JSON5 spec says an identifier can be anything that matches the
 // ECMAScript's IdentifierName production, this brings all kinds of Unicode
 // complications (and allows `$` anywhere in the identifier). So for now we
-// restrict it to the C identifier in the ASCII alphabet.
+// restrict it to the C identifier in the ASCII alphabet plus allow `$` (helps
+// to pass reference implementation tests).
 //
 static bool
 is_first_id_char (int c)
 {
   return (c == '_'               ||
           (c >= 'a' && c <= 'z') ||
-          (c >= 'A' && c <= 'Z'));
+          (c >= 'A' && c <= 'Z') ||
+          c == '$');
 }
 
 static bool
@@ -1249,7 +1251,8 @@ is_subseq_id_char (int c)
   return (c == '_'               ||
           (c >= 'a' && c <= 'z') ||
           (c >= 'A' && c <= 'Z') ||
-          (c >= '0' && c <= '9'));
+          (c >= '0' && c <= '9') ||
+          c == '$');
 }
 
 // Read the remainder of an identifier given its first character.
