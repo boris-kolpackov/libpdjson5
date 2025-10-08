@@ -1,0 +1,148 @@
+test.options = --json5e
+
+: implied
+:
+{{
+  : basics
+  :
+  $* <<EOI >>EOO
+  foo: 1,
+  "bar" : 2,
+  'baz'
+  : 3
+  EOI
+    1,  1: {
+    1,  1:   foo
+    1,  6:   1
+    2,  1:   bar
+    2,  9:   2
+    3,  1:   baz
+    4,  3:   3
+    5,  0: }
+  EOO
+
+  : literals
+  :
+  $* <<EOI >>EOO
+  null: 1,
+  true: 2,
+  false: 3,
+  Infinity: 4,
+  NaN: 5
+  EOI
+    1,  1: {
+    1,  1:   null
+    1,  7:   1
+    2,  1:   true
+    2,  7:   2
+    3,  1:   false
+    3,  8:   3
+    4,  1:   Infinity
+    4, 11:   4
+    5,  1:   NaN
+    5,  6:   5
+    6,  0: }
+  EOO
+
+  : empty
+  :
+  $* <:'' >>EOO
+    1,  1: {
+    1,  1: }
+  EOO
+
+  : empty-comments
+  :
+  $* <<EOI >>EOO
+  // This feature is enabled by default.
+  //
+  //foo: true,
+
+  // This feature is disabled by default.
+  //
+  //bar: false,
+  EOI
+    1,  1: {
+    8,  0: }
+  EOO
+
+  : comment-after-name
+  :
+  $* <<EOI 2>>EOE !=0
+  bar /*x*/: 1
+  EOI
+  <stdin>:1:1: error: unexpected byte 'b' in value
+  EOE
+
+  : explicit-end
+  :
+  $* <<EOI >>EOO 2>>EOE !=0
+  foo: 1
+  }
+  EOI
+    1,  1: {
+    1,  1:   foo
+    1,  6:   1
+  EOO
+  <stdin>:2:1: error: explicit '}' in implied object
+  EOE
+
+  : junk-before-comma
+  :
+  $* <<EOI >>EOO 2>>EOE !=0
+  foo: 1 123
+  }
+  EOI
+    1,  1: {
+    1,  1:   foo
+    1,  6:   1
+  EOO
+  <stdin>:1:8: error: expected ',' after member value
+  EOE
+
+  : diag
+  :
+  : Test that diagnostics (both messages and positions) issued by the implied
+  : object handling logic matches that of plain JSON5 logic.
+  :
+  # Note: to make sure positions match, run both with and without --json5e.
+  #
+  {{
+    : junk
+    :
+    $* <:"TRUE" 2>>EOE !=0
+    <stdin>:1:1: error: unexpected byte 'T' in value
+    EOE
+
+    : pos-sub
+    :
+    $* <:"truth" 2>>EOE !=0
+    <stdin>:1:4: error: expected 'e' instead of byte 't' in 'true'
+    EOE
+
+    : pos-sup
+    :
+    $* <:"truest" 2>>EOE !=0
+    <stdin>:1:5: error: expected end of text instead of byte 's'
+    EOE
+
+    : pos-nextc
+    :
+    $* <:"tru " 2>>EOE !=0
+    <stdin>:1:4: error: expected 'e' instead of byte ' ' in 'true'
+    EOE
+
+    : pos-eof
+    :
+    $* <:"tru" 2>>EOE !=0
+    <stdin>:1:3: error: expected 'e' instead of end of text in 'true'
+    EOE
+
+    : pos-nextc-newline
+    :
+    $* <:"tru$\n" 2>>EOE !=0
+    <stdin>:1:4: error: expected 'e' instead of byte '
+    ' in 'true'
+    EOE
+  }}
+}}

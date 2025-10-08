@@ -56,7 +56,7 @@ test.options = --json5
   $* <<EOI 2>>EOE !=0
   -Infinty
   EOI
-  <stdin>:1:7: error: expected 'i' instead of byte 't'
+  <stdin>:1:7: error: expected 'i' instead of byte 't' in 'Infinity'
   EOE
 
   : nan
@@ -76,7 +76,7 @@ test.options = --json5
   $* <<EOI 2>>EOE !=0
   -Nan
   EOI
-  <stdin>:1:4: error: expected 'N' instead of byte 'n'
+  <stdin>:1:4: error: expected 'N' instead of byte 'n' in 'NaN'
   EOE
 }}
 
@@ -264,7 +264,7 @@ test.options = --json5
   EOE
 }}
 
-: comments
+: comment
 :
 {{
   : block
@@ -407,6 +407,24 @@ test.options = --json5
     4,  1: 4
     7,  5: 5
   EOO
+
+  : block-only
+  :
+  $* <<EOI 2>>EOE !=0
+  /*
+   * bad
+   */
+  EOI
+  <stdin>:4:0: error: unexpected end of text
+  EOE
+
+  : line-only
+  :
+  $* <<EOI 2>>EOE !=0
+  // bad
+  EOI
+  <stdin>:2:0: error: unexpected end of text
+  EOE
 
   : line-dangling
   :

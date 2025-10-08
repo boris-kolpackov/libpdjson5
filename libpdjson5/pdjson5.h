@@ -6,7 +6,8 @@
 #endif
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #else
 #  if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
 #    include <stdbool.h>
@@ -56,8 +57,15 @@ PDJSON5_SYMEXPORT void json_close (json_stream *json);
 
 PDJSON5_SYMEXPORT void json_set_allocator (json_stream *json, json_allocator *a);
 PDJSON5_SYMEXPORT void json_set_streaming (json_stream *json, bool mode);
-PDJSON5_SYMEXPORT void json_set_json5 (json_stream *json, bool mode);
 
+enum json_language
+{
+  json_language_json,   // Strict JSON.
+  json_language_json5,  // Strict JSON5
+  json_language_json5e, // Extended JSON5.
+};
+PDJSON5_SYMEXPORT void json_set_language (json_stream *json,
+                                          enum json_language language);
 
 PDJSON5_SYMEXPORT enum json_type json_next (json_stream *json);
 PDJSON5_SYMEXPORT enum json_type json_peek (json_stream *json);
@@ -100,7 +108,8 @@ struct json_source
       const char *buffer;
       size_t length;
     } buffer;
-    struct {
+    struct
+    {
       void *ptr;
       json_user_io get;
       json_user_io peek;
@@ -108,7 +117,8 @@ struct json_source
   } source;
 };
 
-struct json_stream {
+struct json_stream
+{
   size_t lineno; // @@ uint64_t (and the rest)
 
   /* While counting lines is straightforward, columns are tricky because we
@@ -138,13 +148,23 @@ struct json_stream {
   size_t linepos; /* Position at the beginning of the current line. */
   size_t lineadj; /* Adjustment for multi-byte UTF-8 sequences. */
   size_t linecon; /* Number of remaining UTF-8 continuation bytes. */
-  size_t colno;   /* Start column for value events or 0. */
+
+  /* Start line/column for value events or 0. */
+  size_t start_lineno;
+  size_t start_colno;
 
   struct json_stack *stack;
   size_t stack_top;
   size_t stack_size;
-  enum json_type next;
+  enum json_type peek;
   unsigned int flags;
+
+  struct
+  {
+    enum json_type type;
+    size_t lineno;
+    size_t colno;
+  } pending;
 
   struct
   {
@@ -153,7 +173,7 @@ struct json_stream {
     size_t string_size;
   } data;
 
-  size_t ntokens;
+  size_t ntokens; // Number of values/names read, recursively.
 
   struct json_source source;
   struct json_allocator alloc;

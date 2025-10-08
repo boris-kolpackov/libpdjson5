@@ -2,6 +2,7 @@
 //
 // --streaming  --  enable streaming/multi-value mode
 // --json5      --  accept JSON5 input
+// --json5e     --  accept JSON5E input
 //
 
 #include <stdio.h>
@@ -19,7 +20,7 @@ int
 main (int argc, char *argv[])
 {
   bool streaming  = false;
-  bool json5 = false;
+  enum json_language language = json_language_json;
 
   for (int i = 1; i < argc; ++i)
   {
@@ -28,7 +29,9 @@ main (int argc, char *argv[])
     if (strcmp (a, "--streaming") == 0)
       streaming = true;
     else if (strcmp (a, "--json5") == 0)
-      json5 = true;
+      language = json_language_json5;
+    else if (strcmp (a, "--json5e") == 0)
+      language = json_language_json5e;
     else
     {
       fprintf (stderr, "error: unexpected argument '%s'\n", a);
@@ -39,7 +42,7 @@ main (int argc, char *argv[])
   json_stream json;
   json_open_stream (&json, stdin);
   json_set_streaming (&json, streaming);
-  json_set_json5 (&json, json5);
+  json_set_language (&json, language);
 
   size_t ind = 0; // Indentation.
 
@@ -110,12 +113,14 @@ main (int argc, char *argv[])
         break;
       }
     case JSON_ARRAY:
+      assert (json_get_context (&json, NULL) == JSON_ARRAY);
       printf ("[\n");
       break;
     case JSON_ARRAY_END:
       printf ("]\n");
       break;
     case JSON_OBJECT:
+      assert (json_get_context (&json, NULL) == JSON_OBJECT);
       printf ("{\n");
       break;
     case JSON_OBJECT_END:

@@ -1,0 +1,7 @@
+// This feature is enabled by default.
+//
+//foo: true,
+
+// This feature is disabled by default.
+//
+//bar: false,
