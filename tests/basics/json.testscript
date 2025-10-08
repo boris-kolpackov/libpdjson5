@@ -23,12 +23,26 @@ $* --streaming <<EOI >>EOO
 1
 -1
 -11
+-0
+0.0
+0e-1
 EOI
   1,  3: 1024
   2,  1: 1
   3,  1: -1
   4,  1: -11
+  5,  1: -0
+  6,  1: 0.0
+  7,  1: 0e-1
 EOO
+
+: number-leading-zero
+:
+$* <<EOI 2>>EOE !=0
+01
+EOI
+<stdin>:1:1: error: leading '0' in number
+EOE
 
 : string
 :

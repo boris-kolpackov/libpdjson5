@@ -827,6 +827,8 @@ read_dec_digits (json_stream *json)
 
   if (nread == 0)
   {
+    json->source.get (&json->source); // For column.
+
     if (c != EOF)
     {
       json_error (json, "expected digit instead of byte '%c'", c);
@@ -866,6 +868,8 @@ read_hex_digits (json_stream *json)
 
   if (nread == 0)
   {
+    json->source.get (&json->source); // For column.
+
     if (c != EOF)
     {
       json_error (json, "expected hex digit instead of byte '%c'", c);
@@ -935,8 +939,11 @@ read_number (json_stream *json, int c)
     // illegal, the reference implementation appears to reject it. So we
     // assume it is (issue #58 in json5-spec).
     //
-    if ((json->flags & JSON_FLAG_JSON5) &&
-        ((c = json->source.peek (&json->source)) == 'x' || c == 'X'))
+    c = json->source.peek (&json->source);
+
+    if (c == '.' ||  c == 'e' || c == 'E')
+      ;
+    else if ((json->flags & JSON_FLAG_JSON5) && (c == 'x' || c == 'X'))
     {
       json->source.get (&json->source); // Consume `x`/`X'.
 
@@ -944,9 +951,11 @@ read_number (json_stream *json, int c)
               read_hex_digits (json) == 0 &&
               pushchar (json, '\0') == 0) ? JSON_NUMBER : JSON_ERROR;
     }
-
-    json_error (json, "%s", "leading '0' in number");
-    return JSON_ERROR;
+    else if (is_dec_digit (c))
+    {
+      json_error (json, "%s", "leading '0' in number");
+      return JSON_ERROR;
+    }
   }
   // Note that we can only get `I` and `N` here if we are in the JSON5 mode.
   //
