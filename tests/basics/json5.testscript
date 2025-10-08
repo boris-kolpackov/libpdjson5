@@ -440,3 +440,9 @@ test.options = --json5
   <stdin>:2:0: error: unexpected end of text before '*/'
   EOE
 }}
+
+: whitespace
+:
+$* <"$\f$\v 123" >>EOO
+  1,  4: 123
+EOO

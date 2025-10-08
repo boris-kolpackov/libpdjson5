@@ -88,7 +88,7 @@ PDJSON5_SYMEXPORT const char *json_get_error (json_stream *json);
 
 PDJSON5_SYMEXPORT int json_source_get (json_stream *json);
 PDJSON5_SYMEXPORT int json_source_peek (json_stream *json);
-PDJSON5_SYMEXPORT bool json_isspace (int c);
+PDJSON5_SYMEXPORT bool json_isspace (json_stream *json, int c);
 
 /* internal */
 

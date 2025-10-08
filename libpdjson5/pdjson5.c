@@ -1017,18 +1017,31 @@ read_number (json_stream *json, int c)
 }
 
 bool
-json_isspace (int c)
+json_isspace (json_stream *json, int c)
 {
   switch (c)
   {
-  case 0x09:
-  case 0x0a:
-  case 0x0d:
-  case 0x20:
+  case ' ':
+  case '\n':
+  case '\t':
+  case '\r':
     return true;
-  }
 
-  return false;
+    // See Chapter 8, "White Space" in the JSON5 spec.
+    //
+    // @@ TODO: handle Unicode Zs category.
+    //
+  case '\f':
+  case '\v':
+  case 0xa0:
+  case 0x2028:
+  case 0x2029:
+  case 0xFEFF:
+    return json->flags & JSON_FLAG_JSON5;
+
+  default:
+    return false;
+  }
 }
 
 static void
@@ -1061,6 +1074,9 @@ skip_comment (json_stream *json, int c)
           newline (json);
           break;
         }
+
+        if (c == '\r')
+          break;
       }
 
       break;
@@ -1103,6 +1119,10 @@ skip_comment (json_stream *json, int c)
 // user-facing json_source_get()) that need to worry about newline
 // housekeeping.
 //
+// Note also that we currently don't count sole \r as a newline. Doing that
+// would require counting the \r\n sequence as a single newline. So we keep
+// it simple for now.
+//
 static int
 next (json_stream *json)
 {
@@ -1111,7 +1131,7 @@ next (json_stream *json)
   {
     c = json->source.get (&json->source);
 
-    if (json_isspace (c))
+    if (json_isspace (json, c))
     {
       if (c == '\n')
         newline (json);
@@ -1149,7 +1169,7 @@ peek (json_stream *json)
   {
     c = json->source.peek (&json->source);
 
-    if (!json_isspace (c))
+    if (!json_isspace (json, c))
       return c;
 
     json->source.get (&json->source);
