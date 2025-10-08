@@ -902,7 +902,7 @@ read_number (json_stream *json, int c)
   {
     c = json->source.get (&json->source);
     if (is_dec_digit (c) ||
-        ((c == 'I' || c == 'N') && (json->flags & JSON_FLAG_JSON5)))
+        ((json->flags & JSON_FLAG_JSON5) && (c == 'I' || c == 'N' || c == '.')))
     {
       if (pushchar (json, c) != 0)
         return JSON_ERROR;
@@ -957,14 +957,28 @@ read_number (json_stream *json, int c)
       return JSON_ERROR;
     }
   }
-  // Note that we can only get `I` and `N` here if we are in the JSON5 mode.
+  // Note that we can only get `I`, `N`, and `.` here if we are in the JSON5
+  // mode.
   //
   else if (c == 'I')
     return is_match (json, "Infinity", true /* copy */, JSON_NUMBER);
   else if (c == 'N')
     return is_match (json, "NaN", true /* copy */, JSON_NUMBER);
+  else if (c == '.')
+  {
+    // It is more straightforward to handle leading dot as a special case. It
+    // also takes care of the invalid sole dot case.
+    //
+    if (read_dec_digits (json) != 0)
+      return JSON_ERROR;
 
-  /* Up to decimal or exponent has been read. */
+    c = json->source.peek (&json->source);
+    if (c != 'e' && c != 'E')
+      return pushchar (json, '\0') == 0 ? JSON_NUMBER : JSON_ERROR;
+  }
+
+  // Up to decimal or exponent has been read.
+  //
   c = json->source.peek (&json->source);
   if (c != '.' && c != 'e' && c != 'E')
   {
@@ -978,7 +992,10 @@ read_number (json_stream *json, int c)
     if (pushchar (json, c) != 0)
       return JSON_ERROR;
 
-    if (read_dec_digits (json) != 0)
+    if ((json->flags & JSON_FLAG_JSON5) &&
+        !is_dec_digit (json->source.peek (&json->source)))
+      ; // Trailing dot.
+    else if (read_dec_digits (json) != 0)
       return JSON_ERROR;
   }
 
@@ -1225,6 +1242,7 @@ read_value (json_stream *json, int c)
     type = is_match (json, "true", false /* copy */, JSON_TRUE);
     break;
   case '+':
+  case '.': // Leading dot
   case 'I': // Infinity
   case 'N': // NaN
     if (!(json->flags & JSON_FLAG_JSON5))

@@ -84,6 +84,54 @@ test.options = --json5
   EOI
   <stdin>:1:4: error: expected 'N' instead of byte 'n' in 'NaN'
   EOE
+
+  : leading-dot
+  :
+  $* --streaming <<EOI >>EOO
+  .0
+  .123
+  .123e-3
+  -.0
+  -.123
+  -.123
+  EOI
+    1,  1: .0
+    2,  1: .123
+    3,  1: .123e-3
+    4,  1: -.0
+    5,  1: -.123
+    6,  1: -.123
+  EOO
+
+  : trailing-dot
+  :
+  $* --streaming <<EOI >>EOO
+  0.
+  123.
+  123.e-3
+  EOI
+    1,  1: 0.
+    2,  1: 123.
+    3,  1: 123.e-3
+  EOO
+
+  : lone-dot
+  :
+  $* <<EOI 2>>EOE !=0
+  .
+  EOI
+  <stdin>:1:2: error: expected digit instead of byte '
+  '
+  EOE
+
+  : lone-dot-with-sign
+  :
+  $* <<EOI 2>>EOE !=0
+  -.
+  EOI
+  <stdin>:1:3: error: expected digit instead of byte '
+  '
+  EOE
 }}
 
 : escape
