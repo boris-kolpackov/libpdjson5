@@ -66,12 +66,84 @@ test.options = --json5e
     8,  0: }
   EOO
 
-  : comment-after-name
+  : block-comment-after-name
   :
-  $* <<EOI 2>>EOE !=0
-  bar /*x*/: 1
+  $* <<EOI >>EOO
+  bar/*_value*/: 1
   EOI
-  <stdin>:1:1: error: unexpected byte 'b' in value
+    1,  1: {
+    1,  1:   bar
+    1, 16:   1
+    2,  0: }
+  EOO
+
+  : line-comment-after-name
+  :
+  $* <<EOI >>EOO
+  bar//_value
+  :
+  1
+  EOI
+    1,  1: {
+    1,  1:   bar
+    2,  1:   1
+    3,  0: }
+  EOO
+
+  : not-implied-string
+  :
+  $* <<EOI >>EOO
+  "foo"
+  EOI
+    1,  1: "foo"
+  EOO
+
+  : not-implied-string-comment
+  :
+  $* <<EOI >>EOO
+  "foo" //comment
+  EOI
+    1,  1: "foo"
+  EOO
+
+  : not-implied-string-comment-eof
+  :
+  $* <:'"foo" //comment' >>EOO
+    1,  1: "foo"
+  EOO
+
+  : not-implied-string-comment-dangling
+  :
+  $* <:'"foo" /*comment*' 2>>EOE !=0
+  <stdin>:1:16: error: unexpected end of text before '*/'
+  EOE
+
+  : not-implied-name
+  :
+  $* <<EOI >>EOO
+  true
+  EOI
+    1,  1: <true>
+  EOO
+
+  : not-implied-name-comment
+  :
+  $* <<EOI >>EOO
+  true //comment
+  EOI
+    1,  1: <true>
+  EOO
+
+  : not-implied-name-comment-eof
+  :
+  $* <:'true //comment' >>EOO
+    1,  1: <true>
+  EOO
+
+  : not-implied-name-comment-dangling
+  :
+  $* <:'true /*comment*' 2>>EOE !=0
+  <stdin>:1:15: error: unexpected end of text before '*/'
   EOE
 
   : explicit-end
@@ -143,6 +215,24 @@ test.options = --json5e
     $* <:"tru$\n" 2>>EOE !=0
     <stdin>:1:4: error: expected 'e' instead of byte '
     ' in 'true'
+    EOE
+
+    : not-comment
+    :
+    $* <:"true /comment" 2>>EOE !=0
+    <stdin>:1:6: error: expected end of text instead of byte '/'
+    EOE
+
+    : not-comment-eof
+    :
+    $* <:"true/" 2>>EOE !=0
+    <stdin>:1:5: error: expected end of text instead of byte '/'
+    EOE
+
+    : not-value-comment
+    :
+    $* <:"tue /comment" 2>>EOE !=0
+    <stdin>:1:2: error: expected 'r' instead of byte 'u' in 'true'
     EOE
   }}
 }}

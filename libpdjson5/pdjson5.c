@@ -1081,8 +1081,8 @@ newline (json_stream *json)
 
 // Given the peeked-at comment determinant character (`/` or `*`), skip
 // everything until the end of the comment (newline or `*/`) and return the
-// last character read. This function can fail by returning EOF and setting
-// the error flag.
+// last character read (newline, '/', or EOF). This function can fail by
+// returning EOF and setting the error flag.
 //
 static int
 skip_comment (json_stream *json, int c)
@@ -1178,31 +1178,6 @@ next (json_stream *json)
     break;
   }
   return c;
-}
-
-// As above but only peek at the non-whitespace character. Note that unlike
-// the above function, this version does not skip comments (since that would
-// require a two-character look-ahead). It also therefore cannot fail.
-//
-// Note: should not be used in the streaming mode since it may consume
-// value-separating whitespaces.
-//
-static int
-peek (json_stream *json)
-{
-  int c;
-  while (true)
-  {
-    c = json->source.peek (&json->source);
-
-    if (!json_isspace (json, c))
-      return c;
-
-    json->source.get (&json->source);
-
-    if (c == '\n')
-      newline (json);
-  }
 }
 
 static enum json_type
@@ -1581,8 +1556,7 @@ json_next (json_stream *json)
     // Limitations:
     //
     // - Incompatible with the streaming mode.
-    // - No comments between the name and `:`.
-    // - Line/columns numbers for implied `{` and `}` are the first
+    // - Line/columns numbers for implied `{` and `}` are of the first
     //   member name and EOF, respectively.
     //
     //
@@ -1604,8 +1578,45 @@ json_next (json_stream *json)
 
         enum json_type type;
 
-        int nc = json->source.peek (&json->source); // For diagnostics below.
-        if (peek (json) == ':')
+        // Peek at the next non-whitespace/comment character, similar to
+        // next(). Note that skipping comments would require a two-character
+        // look-ahead, which we don't have. However, `/` in this context that
+        // does not start a comment would be illegal. So we simply diagnose
+        // this case here, making sure to recreate exactly the same
+        // diagnostics (both message and location-wise) as would be issued in
+        // the non-extended mode.
+        //
+        // Save the next character after the name for diagnostics below.
+        //
+        int nc = json->source.peek (&json->source);
+        for (c = nc; ; c = json->source.peek (&json->source))
+        {
+          if (!json_isspace (json, c) && c != '/')
+            break;
+
+          json->source.get (&json->source);
+
+          if (c == '\n')
+            newline (json);
+          else if (c == '/')
+          {
+            int p = json->source.peek (&json->source);
+            if (p == '/' || p == '*')
+            {
+              if ((c = skip_comment (json, p)) == EOF)
+              {
+                if (json->flags & JSON_FLAG_ERROR)
+                  return JSON_ERROR;
+
+                break;
+              }
+            }
+            else
+              break; // Diagnose read '/' below.
+          }
+        }
+
+        if (c == ':')
         {
           json->pending.type = JSON_STRING;
           json->pending.lineno = lineno;
@@ -1631,7 +1642,7 @@ json_next (json_stream *json)
           //
           if (id)
           {
-            switch ((c = json->data.string[0]))
+            switch (json->data.string[0])
             {
             case 'n':
               type = is_match_string (json, "null", nc , &colno, JSON_NULL);
@@ -1649,12 +1660,24 @@ json_next (json_stream *json)
               type = is_match_string (json, "NaN", nc , &colno, JSON_NUMBER);
               break;
             default:
-              json_error (json, "unexpected byte '%c' in value", c);
+              json_error (json,
+                          "unexpected byte '%c' in value",
+                          json->data.string[0]);
               type = JSON_ERROR;
             }
           }
           else
             type = JSON_STRING;
+
+          // Per the above comment handling logic, if the character we are
+          // looking at is `/`, then it is read, not peeked at, and so we
+          // have to diagnose it here.
+          //
+          if (type != JSON_ERROR && c == '/')
+          {
+            json_error (json, "expected end of text instead of byte '%c'", c)
+            return JSON_ERROR; // Don't override location.
+          }
         }
 
         // Note: set even in case of an error since peek() above moved the
