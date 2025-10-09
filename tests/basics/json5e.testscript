@@ -24,27 +24,125 @@ EOI
  12,  1: }
 EOO
 
-: implied
+: identifier
 :
 {{
   : basics
   :
   $* <<EOI >>EOO
+  {
+    foo-bar: 1,
+    foo.bar: 2,
+    foo-:3,
+    foo.:4,
+  }
+  EOI
+    1,  1: {
+    2,  3:   foo-bar
+    2, 12:   1
+    3,  3:   foo.bar
+    3, 12:   2
+    4,  3:   foo-
+    4,  8:   3
+    5,  3:   foo.
+    5,  8:   4
+    6,  1: }
+  EOO
+
+  : leading-dash
+  :
+  $* <'{-foo:1}' >>EOO 2>>EOE !=0
+    1,  1: {
+  EOO
+  <stdin>:1:2: error: expected member name
+  EOE
+
+  : leading-dot
+  :
+  $* <'{.foo:1}' >>EOO 2>>EOE !=0
+    1,  1: {
+  EOO
+  <stdin>:1:2: error: expected member name
+  EOE
+}}
+
+: implied
+:
+{{
+  # NOTE: only the first member goes through the implied logic.
+
+  : identifier
+  :
+  $* <<EOI >>EOO
   foo: 1,
-  "bar" : 2,
-  'baz'
-  : 3
+  bar: 2
   EOI
     1,  1: {
     1,  1:   foo
     1,  6:   1
     2,  1:   bar
-    2,  9:   2
-    3,  1:   baz
-    4,  3:   3
-    5,  0: }
+    2,  6:   2
+    3,  0: }
   EOO
 
+  : identifier-dash
+  :
+  $* <<EOI >>EOO
+  f-o: 1,
+  bar: 2
+  EOI
+    1,  1: {
+    1,  1:   f-o
+    1,  6:   1
+    2,  1:   bar
+    2,  6:   2
+    3,  0: }
+  EOO
+
+  : identifier-dot
+  :
+  $* <<EOI >>EOO
+  f.o: 1,
+  bar: 2
+  EOI
+    1,  1: {
+    1,  1:   f.o
+    1,  6:   1
+    2,  1:   bar
+    2,  6:   2
+    3,  0: }
+  EOO
+
+  : string-single
+  :
+  $* <<EOI >>EOO
+  'foo': 1,
+  bar: 2
+  EOI
+    1,  1: {
+    1,  1:   foo
+    1,  8:   1
+    2,  1:   bar
+    2,  6:   2
+    3,  0: }
+  EOO
+
+  : string-double
+  :
+  $* <<EOI >>EOO
+  "foo": 1,
+  bar: 2
+  EOI
+    1,  1: {
+    1,  1:   foo
+    1,  8:   1
+    2,  1:   bar
+    2,  6:   2
+    3,  0: }
+  EOO
+
+  # @@ Split.
+  #
   : literals
   :
   $* <<EOI >>EOO
@@ -270,6 +368,18 @@ EOO
     :
     $* <:"tue /comment" 2>>EOE !=0
     <stdin>:1:2: error: expected 'r' instead of byte 'u' in 'true'
+    EOE
+
+    : identifier-dash
+    :
+    $* <:"true-1" 2>>EOE !=0
+    <stdin>:1:5: error: expected end of text instead of byte '-'
+    EOE
+
+    : identifier-dot
+    :
+    $* <:"true.1" 2>>EOE !=0
+    <stdin>:1:5: error: expected end of text instead of byte '.'
     EOE
   }}
 }}
