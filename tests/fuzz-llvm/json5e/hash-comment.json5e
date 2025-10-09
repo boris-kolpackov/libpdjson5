@@ -1,0 +1,14 @@
+# begin object
+#
+{
+  # first member
+  foo: # this is foo
+  # first value
+  1    # this is one
+  # next comes trailing comma
+  , # this is comma
+  #bar: 2
+  # after last member
+}
+#
+# end object

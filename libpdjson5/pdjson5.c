@@ -1079,10 +1079,10 @@ newline (json_stream *json)
   json->linecon = 0;
 }
 
-// Given the peeked-at comment determinant character (`/` or `*`), skip
-// everything until the end of the comment (newline or `*/`) and return the
-// last character read (newline, '/', or EOF). This function can fail by
-// returning EOF and setting the error flag.
+// Given the comment determinant character (`/`, `*`, `#`), skip everything
+// until the end of the comment (newline or `*/`) and return the last
+// character read (newline, '/', or EOF). This function can fail by returning
+// EOF and setting the error flag.
 //
 static int
 skip_comment (json_stream *json, int c)
@@ -1090,6 +1090,7 @@ skip_comment (json_stream *json, int c)
   switch (c)
   {
   case '/':
+  case '#':
     {
       // Skip everything until the next newline or EOF.
       //
@@ -1111,8 +1112,6 @@ skip_comment (json_stream *json, int c)
     {
       // Skip everything until closing `*/` or EOF.
       //
-      json->source.get (&json->source); // Consume opening `*`.
-
       while ((c = json->source.get (&json->source)) != EOF)
       {
         if (c == '*')
@@ -1170,9 +1169,15 @@ next (json_stream *json)
       int p = json->source.peek (&json->source);
       if (p == '/' || p == '*')
       {
+        json->source.get (&json->source);
         if ((c = skip_comment (json, p)) != EOF)
           continue;
       }
+    }
+    else if (c == '#' && (json->flags & JSON_FLAG_JSON5E))
+    {
+      if ((c = skip_comment (json, c)) != EOF)
+        continue;
     }
 
     break;
@@ -1591,7 +1596,7 @@ json_next (json_stream *json)
         int nc = json->source.peek (&json->source);
         for (c = nc; ; c = json->source.peek (&json->source))
         {
-          if (!json_isspace (json, c) && c != '/')
+          if (!json_isspace (json, c) && c != '/' && c != '#')
             break;
 
           json->source.get (&json->source);
@@ -1603,6 +1608,7 @@ json_next (json_stream *json)
             int p = json->source.peek (&json->source);
             if (p == '/' || p == '*')
             {
+              json->source.get (&json->source);
               if ((c = skip_comment (json, p)) == EOF)
               {
                 if (json->flags & JSON_FLAG_ERROR)
@@ -1613,6 +1619,16 @@ json_next (json_stream *json)
             }
             else
               break; // Diagnose read '/' below.
+          }
+          else if (c == '#')
+          {
+            if ((c = skip_comment (json, c)) == EOF)
+            {
+              if (json->flags & JSON_FLAG_ERROR)
+                return JSON_ERROR;
+
+              break;
+            }
           }
         }
 
