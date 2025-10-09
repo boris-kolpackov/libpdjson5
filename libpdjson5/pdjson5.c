@@ -1263,6 +1263,16 @@ read_value (json_stream *json, int c)
 // restrict it to the C identifier in the ASCII alphabet plus allow `$` (helps
 // to pass reference implementation tests).
 //
+// For JSON5E we allow `-` and `.` but not as a first character. Both of these
+// are valid beginnings of a JSON/JSON5 value (-1, .1) so strictly speaking,
+// there is an ambiguity: is true-1 an identifier or two values (true and -1)?
+// However, in our context (object member name), two values would be illegal.
+// And so we resolve this ambiguity in favor of an identifier. One special
+// case is the implied top-level object. But since implied objects are
+// incompatible with the streaming mode, two top-level values would still be
+// illegal (and, yes, true-1 is a valid two-value input in the streaming
+// mode).
+//
 static bool
 is_first_id_char (int c)
 {
@@ -1273,12 +1283,13 @@ is_first_id_char (int c)
 }
 
 static bool
-is_subseq_id_char (int c)
+is_subseq_id_char (int c, bool extended)
 {
-  return (c == '_'               ||
-          (c >= 'a' && c <= 'z') ||
-          (c >= 'A' && c <= 'Z') ||
-          (c >= '0' && c <= '9') ||
+  return (c == '_'                             ||
+          (c >= 'a' && c <= 'z')               ||
+          (c >= 'A' && c <= 'Z')               ||
+          (c >= '0' && c <= '9')               ||
+          (extended && (c == '-' || c == '.')) ||
           c == '$');
 }
 
@@ -1292,14 +1303,14 @@ read_identifier (json_stream *json, int c)
 
   json->data.string_fill = 0;
 
-  while (true)
+  for (bool extended = (json->flags & JSON_FLAG_JSON5E);;)
   {
     if (pushchar (json, c) != 0)
       return JSON_ERROR;
 
     c = json->source.peek (&json->source);
 
-    if (!is_subseq_id_char (c))
+    if (!is_subseq_id_char (c, extended))
       break;
 
     json->source.get (&json->source);
