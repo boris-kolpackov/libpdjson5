@@ -21,7 +21,8 @@
 // Runtime state flags.
 //
 #define JSON_FLAG_ERROR        0x08U
-#define JSON_FLAG_IMPLIED_END  0x10U
+#define JSON_FLAG_NEWLINE      0x10U // Newline seen by last call to next().
+#define JSON_FLAG_IMPLIED_END  0x20U // Implied top-level object end pending.
 
 #if defined(_MSC_VER) && (_MSC_VER < 1900)
 
@@ -1081,8 +1082,9 @@ newline (json_stream *json)
 
 // Given the comment determinant character (`/`, `*`, `#`), skip everything
 // until the end of the comment (newline or `*/`) and return the last
-// character read (newline, '/', or EOF). This function can fail by returning
-// EOF and setting the error flag.
+// character read (newline, '/', or EOF). If newline was seen, set
+// JSON_FLAG_NEWLINE. This function can fail by returning EOF and setting the
+// error flag.
 //
 static int
 skip_comment (json_stream *json, int c)
@@ -1098,6 +1100,7 @@ skip_comment (json_stream *json, int c)
       {
         if (c == '\n')
         {
+          json->flags |= JSON_FLAG_NEWLINE;
           newline (json);
           break;
         }
@@ -1123,7 +1126,10 @@ skip_comment (json_stream *json, int c)
           }
         }
         else if (c == '\n')
+        {
+          json->flags |= JSON_FLAG_NEWLINE;
           newline (json);
+        }
       }
 
       if (c == EOF)
@@ -1137,20 +1143,25 @@ skip_comment (json_stream *json, int c)
 }
 
 // Returns the next non-whitespace (and non-comment, for JSON5) character in
-// the stream. This function can fail by returning EOF and setting the error
-// flag.
+// the stream. If newline was seen, set JSON_FLAG_NEWLINE. This function can
+// fail by returning EOF and setting the error flag.
 //
 // Note that this and the peek() below are the only functions (besides the
 // user-facing json_source_get()) that need to worry about newline
 // housekeeping.
 //
-// Note also that we currently don't count sole \r as a newline. Doing that
-// would require counting the \r\n sequence as a single newline. So we keep
-// it simple for now.
+// Note also that we currently don't treat sole \r as a newline for the
+// line/column counting purposes, even though JSON5 treats it as such (in
+// comment end, line continuations). Doing that would require counting the
+// \r\n sequence as a single newline. So we keep it simple for now.
+//
+// We will also require \n to be able to omit `,` in JSON5E.
 //
 static int
 next (json_stream *json)
 {
+  json->flags &= ~JSON_FLAG_NEWLINE;
+
   int c;
   while (true)
   {
@@ -1159,7 +1170,10 @@ next (json_stream *json)
     if (json_isspace (json, c))
     {
       if (c == '\n')
+      {
+        json->flags |= JSON_FLAG_NEWLINE;
         newline (json);
+      }
 
       continue;
     }
@@ -1449,6 +1463,12 @@ json_next (json_stream *json)
         // in JSON5E it can also be followed by EOF in case of an implied
         // top-level object.
         //
+        // In JSON5E comma can be omitted provided the preceding value and the
+        // following name are separated by a newline. Or, to put it another
+        // way, in this mode, if a newline was seen by the above call to
+        // next() and the returned character is not '}' and, in the implied
+        // case, not EOF, then we can rightfully expect a name.
+        //
         bool implied = (json->stack_top == 0 &&
                         (json->flags & JSON_FLAG_IMPLIED_END));
         if (c == ',')
@@ -1463,9 +1483,15 @@ json_next (json_stream *json)
           else
           {
             json->stack[json->stack_top].count++;
-
             return read_name (json, c);
           }
+        }
+        else if (json->flags & JSON_FLAG_JSON5E  &&
+                 json->flags & JSON_FLAG_NEWLINE &&
+                 c != '}' && (!implied || c != EOF))
+        {
+          json->stack[json->stack_top].count++;
+          return read_name (json, c);
         }
 
         if (!implied)
@@ -1473,7 +1499,11 @@ json_next (json_stream *json)
           if (c == '}')
             return pop (json, JSON_OBJECT_END);
 
-          json_error (json, "%s", "expected ',' or '}' after member value");
+          json_error (json,
+                      "%s",
+                      ((json->flags & JSON_FLAG_JSON5E)
+                       ? "expected '}', newline, or ',' after member value"
+                       : "expected ',' or '}' after member value"));
           return JSON_ERROR;
         }
 
@@ -1494,7 +1524,7 @@ json_next (json_stream *json)
         }
         else
         {
-          json_error (json, "%s", "expected ',' after member value");
+          json_error (json, "%s", "expected newline or ',' after member value");
         }
 
         return JSON_ERROR;
@@ -1539,6 +1569,12 @@ json_next (json_stream *json)
       //
       // In JSON5 comma can be followed directly by the closing brace.
       //
+      // In JSON5E comma can be omitted provided the preceding and the
+      // following values are separated by a newline. Or, to put it another
+      // way, in this mode, if a newline was seen by the above call to next()
+      // and the returned character is not ']', then we can rightfully expect
+      // a value.
+      //
       if (c == ',')
       {
         c = next (json);
@@ -1553,11 +1589,22 @@ json_next (json_stream *json)
           return read_value (json, c);
         }
       }
+      else if (json->flags & JSON_FLAG_JSON5E  &&
+               json->flags & JSON_FLAG_NEWLINE &&
+               c != ']')
+      {
+        json->stack[json->stack_top].count++;
+        return read_value (json, c);
+      }
 
       if (c == ']')
         return pop (json, JSON_ARRAY_END);
 
-      json_error (json, "%s", "expected ',' or ']' after array value");
+      json_error (json,
+                  "%s",
+                  ((json->flags & JSON_FLAG_JSON5E)
+                   ? "expected ']', newline, or ',' after array value"
+                   : "expected ',' or ']' after array value"));
       return JSON_ERROR;
     }
   }
