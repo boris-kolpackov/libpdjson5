@@ -141,29 +141,43 @@ EOO
     3,  0: }
   EOO
 
-  # @@ Split.
-  #
-  : literals
+  : literal
   :
   $* <<EOI >>EOO
   null: 1,
-  true: 2,
-  false: 3,
-  Infinity: 4,
-  NaN: 5
+  foo: 2
   EOI
     1,  1: {
     1,  1:   null
     1,  7:   1
-    2,  1:   true
-    2,  7:   2
-    3,  1:   false
-    3,  8:   3
-    4,  1:   Infinity
-    4, 11:   4
-    5,  1:   NaN
-    5,  6:   5
-    6,  0: }
+    2,  1:   foo
+    2,  6:   2
+    3,  0: }
+  EOO
+
+  : number
+  :
+  $* <<EOI >>EOO
+  Infinity: 1,
+  foo: 2
+  EOI
+    1,  1: {
+    1,  1:   Infinity
+    1, 11:   1
+    2,  1:   foo
+    2,  6:   2
+    3,  0: }
+  EOO
+
+  : trailing-comma
+  :
+  $* <<EOI >>EOO
+  foo: 1,
+  EOI
+    1,  1: {
+    1,  1:   foo
+    1,  6:   1
+    2,  0: }
   EOO
 
   : empty

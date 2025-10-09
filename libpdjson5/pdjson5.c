@@ -1445,15 +1445,20 @@ json_next (json_stream *json)
       {
         // Expecting comma followed by member name or closing brace.
         //
-        // In JSON5 comma can be followed directly by the closing brace.
+        // In JSON5 comma can be followed directly by the closing brace. And
+        // in JSON5E it can also be followed by EOF in case of an implied
+        // top-level object.
         //
+        bool implied = (json->stack_top == 0 &&
+                        (json->flags & JSON_FLAG_IMPLIED_END));
         if (c == ',')
         {
           c = next (json);
           if (json->flags & JSON_FLAG_ERROR)
             return JSON_ERROR;
 
-          if ((json->flags & JSON_FLAG_JSON5) && c == '}')
+          if (((json->flags & JSON_FLAG_JSON5) && c == '}') ||
+              (implied && c == EOF))
             ; // Fall through.
           else
           {
@@ -1463,7 +1468,7 @@ json_next (json_stream *json)
           }
         }
 
-        if (json->stack_top != 0 || !(json->flags & JSON_FLAG_IMPLIED_END))
+        if (!implied)
         {
           if (c == '}')
             return pop (json, JSON_OBJECT_END);

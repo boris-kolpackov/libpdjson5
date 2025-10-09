@@ -1,5 +1,2 @@
 null: 1,
-true: 2,
-false: 3,
-Infinity: 4,
-NaN: 5
+foo: 2
