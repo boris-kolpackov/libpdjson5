@@ -1,0 +1,6 @@
+{
+  foo: 1
+  fox: 2 //comment
+  bar: 3 /*comm
+  end*/baz: 4
+}
