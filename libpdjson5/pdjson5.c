@@ -952,7 +952,9 @@ read_number (json_stream *json, int c)
               read_hex_digits (json) == 0 &&
               pushchar (json, '\0') == 0) ? JSON_NUMBER : JSON_ERROR;
     }
-    else if (is_dec_digit (c))
+    // There is a nuance: `01` in normal mode is two values.
+    //
+    else if (!(json->flags & JSON_FLAG_STREAMING) && is_dec_digit (c))
     {
       json_error (json, "%s", "leading '0' in number");
       return JSON_ERROR;
