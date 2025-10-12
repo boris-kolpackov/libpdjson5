@@ -301,9 +301,9 @@ push (json_stream *json, enum json_type type)
 
   if (new_stack_top >= json->stack_size)
   {
-    struct json_stack *stack;
     size_t size = (json->stack_size + PDJSON5_STACK_INC) * sizeof (*json->stack);
-    stack = (struct json_stack *)json->alloc.realloc (json->stack, size);
+    struct json_stack *stack =
+      (struct json_stack *)json->alloc.realloc (json->stack, size); // THROW
     if (stack == NULL)
     {
       json_error (json, "%s", "out of memory");
@@ -407,19 +407,19 @@ pushchar (json_stream *json, int c)
   if (json->data.string_fill == json->data.string_size)
   {
     size_t size = json->data.string_size * 2;
-    char *buffer = (char *)json->alloc.realloc (json->data.string, size);
+    char *buffer = (char *)json->alloc.realloc (json->data.string, size); // THROW
     if (buffer == NULL)
     {
       json_error (json, "%s", "out of memory");
       return -1;
     }
-    else
-    {
-      json->data.string_size = size;
-      json->data.string = buffer;
-    }
+
+    json->data.string_size = size;
+    json->data.string = buffer;
   }
+
   json->data.string[json->data.string_fill++] = c;
+
   return 0;
 }
 
@@ -514,7 +514,7 @@ static int
 init_string (json_stream *json)
 {
   json->data.string_size = 256; // @@ Make configurable?
-  json->data.string = (char *)json->alloc.malloc (json->data.string_size);
+  json->data.string = (char *)json->alloc.malloc (json->data.string_size); // THROW
   if (json->data.string == NULL)
   {
     json_error (json, "%s", "out of memory");

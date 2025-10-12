@@ -37,6 +37,10 @@ enum json_type
   JSON_NULL
 };
 
+// Custom allocator and io functions may throw provided the parser was
+// compiled with exceptions support (-fexceptions, etc). In this case, the
+// only valid operation on json_stream is to close it with json_close().
+//
 struct json_allocator
 {
   void *(*malloc) (size_t);
