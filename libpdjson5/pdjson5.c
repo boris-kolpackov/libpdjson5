@@ -513,7 +513,7 @@ is_match_string (json_stream *json,
 static int
 init_string (json_stream *json)
 {
-  json->data.string_size = 1024; // @@ Too large, make configurable?
+  json->data.string_size = 256; // @@ Make configurable?
   json->data.string = (char *)json->alloc.malloc (json->data.string_size);
   if (json->data.string == NULL)
   {
