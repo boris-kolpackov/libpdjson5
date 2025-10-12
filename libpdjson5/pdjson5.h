@@ -84,13 +84,50 @@ PDJSON5_SYMEXPORT size_t json_get_position (json_stream *json);
 PDJSON5_SYMEXPORT size_t json_get_column (json_stream *json);
 PDJSON5_SYMEXPORT size_t json_get_depth (json_stream *json);
 PDJSON5_SYMEXPORT enum json_type json_get_context (json_stream *json, size_t *count);
+
+// Return error message if the previously peeked at or consumed even was
+// JSON_ERROR and NULL otherwise. Note that the message is UTF-8 encoded.
+//
 PDJSON5_SYMEXPORT const char *json_get_error (json_stream *json);
 
 PDJSON5_SYMEXPORT int json_source_get (json_stream *json);
 PDJSON5_SYMEXPORT int json_source_peek (json_stream *json);
-PDJSON5_SYMEXPORT bool json_isspace (json_stream *json, int c);
 
-/* internal */
+// Note that this function only examines the first byte of a potentially
+// multi-byte UTF-8 sequence. As result, it only returns true for whitespaces
+// encoded single bytes. Those are the only valid ones for JSON but not for
+// JSON5. If you need to detect multi-byte whitespaces, then you will either
+// need to do this yourself (and diagnose any non-whitespaces as appropriate)
+// or use json_skip_if_space() below.
+//
+PDJSON5_SYMEXPORT bool json_is_space (json_stream *json, int byte);
+
+// Given a peeked at byte, consume it and any following bytes that are part of
+// the same multi-byte UTF-8 sequence if it is a whitespace and return 1. If
+// it is a part of a multi-byte UTF-8 sequence but is not a whitespace,
+// consume it, trigger an error, and return -1 (a codepoint that requires
+// multiple bytes is only valid in JSON strings). Otherwise (single-byte
+// non-whitespace), don't consume it and return 0.
+//
+// If the result is 1 and codepoint is not NULL, then set it to the decoded
+// whitespace codepoint.
+//
+// Note that in the JSON5/JSON5E mode this function also skips comments,
+// treating each as a single logical whitespace (but you can omit skipping
+// comments by pre-checking the peeked byte for '/' and '#'). In this case,
+// codepoint will contain the comment determinant character (`/`, `*`, `#`).
+// Note that for the line comments (`//' and `#`), the newline is part of the
+// comment.
+//
+// This function is primarily meant for custom handling of separators between
+// values in the streaming mode. Its semantics is rather convoluted due to the
+// above get/peek interface operating on bytes, not codepoints.
+//
+PDJSON5_SYMEXPORT int
+json_skip_if_space (json_stream *json, int byte, unsigned long* codepoint);
+
+// Implementation details.
+//
 
 struct json_source
 {
@@ -177,7 +214,9 @@ struct json_stream
 
   struct json_source source;
   struct json_allocator alloc;
-  char errmsg[128];
+
+  char error_message[128];
+  char utf8_char[6]; // Up to 4 for UTF-8, 2 for quotes, one for \0.
 };
 
 #ifdef __cplusplus

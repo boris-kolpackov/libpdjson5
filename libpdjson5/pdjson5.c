@@ -26,14 +26,14 @@
 
 #if defined(_MSC_VER) && (_MSC_VER < 1900)
 
-#define json_error(json, format, ...)                             \
-  if (!(json->flags & FLAG_ERROR))                                \
-  {                                                               \
-    json->flags |= FLAG_ERROR;                                    \
-    _snprintf_s (json->errmsg, sizeof (json->errmsg),             \
-                _TRUNCATE,                                        \
-                format,                                           \
-                __VA_ARGS__);                                     \
+#define json_error(json, format, ...)                               \
+  if (!(json->flags & FLAG_ERROR))                                  \
+  {                                                                 \
+    json->flags |= FLAG_ERROR;                                      \
+    _snprintf_s (json->error_message, sizeof (json->error_message), \
+                 _TRUNCATE,                                         \
+                 format,                                            \
+                 __VA_ARGS__);                                      \
   }
 
 #else
@@ -42,12 +42,238 @@
   if (!(json->flags & FLAG_ERROR))                                \
   {                                                               \
     json->flags |= FLAG_ERROR;                                    \
-    snprintf (json->errmsg, sizeof (json->errmsg),                \
-             format,                                              \
-             __VA_ARGS__);                                        \
+    snprintf (json->error_message, sizeof (json->error_message),  \
+              format,                                             \
+              __VA_ARGS__);                                       \
   }
 
 #endif /* _MSC_VER */
+
+static size_t
+utf8_seq_length (char byte)
+{
+  unsigned char u = (unsigned char) byte;
+  if (u < 0x80)
+    return 1;
+
+  if (0x80 <= u && u <= 0xBF)
+  {
+    // second, third or fourth byte of a multi-byte
+    // sequence, i.e. a "continuation byte"
+    return 0;
+  }
+  else if (u == 0xC0 || u == 0xC1)
+  {
+    // overlong encoding of an ASCII byte
+    return 0;
+  }
+  else if (0xC2 <= u && u <= 0xDF)
+  {
+    // 2-byte sequence
+    return 2;
+  }
+  else if (0xE0 <= u && u <= 0xEF)
+  {
+    // 3-byte sequence
+    return 3;
+  }
+  else if (0xF0 <= u && u <= 0xF4)
+  {
+    // 4-byte sequence
+    return 4;
+  }
+  else
+  {
+    // u >= 0xF5
+    // Restricted (start of 4-, 5- or 6-byte sequence) or invalid UTF-8
+    return 0;
+  }
+}
+
+static int
+is_legal_utf8 (const unsigned char *bytes, int length)
+{
+  if (0 == bytes || 0 == length)
+    return 0;
+
+  unsigned char a;
+  const unsigned char* srcptr = bytes + length;
+  switch (length)
+  {
+  default:
+    return 0;
+    /* Everything else falls through when true. */
+  case 4:
+    if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return 0;
+    /* FALLTHRU */
+  case 3:
+    if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return 0;
+    /* FALLTHRU */
+  case 2:
+    a = (*--srcptr);
+    switch (*bytes)
+    {
+    case 0xE0:
+      if (a < 0xA0 || a > 0xBF) return 0;
+      break;
+    case 0xED:
+      if (a < 0x80 || a > 0x9F) return 0;
+      break;
+    case 0xF0:
+      if (a < 0x90 || a > 0xBF) return 0;
+      break;
+    case 0xF4:
+      if (a < 0x80 || a > 0x8F) return 0;
+      break;
+    default:
+      if (a < 0x80 || a > 0xBF) return 0;
+      break;
+    }
+    /* FALLTHRU */
+  case 1:
+    if (*bytes >= 0x80 && *bytes < 0xC2)
+      return 0;
+  }
+  return *bytes <= 0xF4;
+}
+
+// Given the first byte of input or EOF (-1), read and decode the remaining
+// bytes of a UTF-8 sequence (if any) and return its single-quoted UTF-8
+// representation (e.g., "'A'") or, for control characters, its name (e.g.,
+// "newline").
+//
+// Note: the passed character must be consumed, not peeked at (an exception
+// can be made for EOF).
+//
+// See also read_space() for similar code.
+//
+static const char *
+diag_char (json_stream *json, int c)
+{
+  if (c == EOF)
+    return "end of text";
+
+  switch (c)
+  {
+  case '\0': return "nul character";
+  case '\b': return "backspace";
+  case '\t': return "horizontal tab";
+  case '\n': return "newline";
+  case '\v': return "vertical tab";
+  case '\f': return "form feed";
+  case '\r': return "carrige return";
+  default:
+    if (c <= 31)
+    {
+      //snprintf (..., "control character %02lx", c);
+      return "control character";
+    }
+  }
+
+  size_t i = 0;
+  char *s = json->utf8_char;
+
+  s[i++] = '\'';
+  s[i++] = c;
+
+  if ((unsigned int)c >= 0x80)
+  {
+    size_t n = utf8_seq_length (c);
+    if (!n)
+      return "invalid UTF-8 sequence";
+
+    size_t j;
+    for (j = 1; j != n; ++j)
+    {
+      if ((c = json->source.get (&json->source)) == EOF)
+        break;
+
+      s[i++] = c;
+      json->lineadj++;
+    }
+
+    if (j != n || !is_legal_utf8 ((unsigned char*)s + 1, n))
+      return "invalid UTF-8 sequence";
+  }
+
+  s[i++] = '\'';
+  s[i] = '\0';
+
+  return s;
+}
+
+// As above but read the UTF-8 sequence from a string. Note: assumes valid
+// UTF-8 and that the string doesn't end before the sequence.
+//
+static const char *
+diag_char_string (json_stream *json, const char* u)
+{
+  char c = *u;
+
+  if ((unsigned char)c < 0x80)
+    return diag_char (json, c);
+
+  size_t i = 0;
+  char *s = json->utf8_char;
+
+  s[i++] = '\'';
+  s[i++] = c;
+
+  size_t n = utf8_seq_length (c);
+  for (size_t j = 1; j != n; ++j)
+    s[i++] = u[j];
+
+  s[i++] = '\'';
+  s[i] = '\0';
+
+  return s;
+}
+
+// As above but for the decoded codepoint.
+//
+static const char *
+diag_codepoint (json_stream *json, unsigned long c)
+{
+  if (c == (unsigned long)-1 /*EOF*/)
+    return diag_char (json, EOF);
+
+  if (c < 0x80UL)
+    return diag_char (json, (int)c);
+
+  size_t i = 0;
+  char *s = json->utf8_char;
+
+  s[i++] = '\'';
+
+  if (c < 0x0800UL)
+  {
+    s[i++] = (c >> 6 & 0x1F) | 0xC0;
+    s[i++] = (c >> 0 & 0x3F) | 0x80;
+  }
+  else if (c < 0x010000UL)
+  {
+    if (c >= 0xd800 && c <= 0xdfff)
+      return "invalid codepoint";
+
+    s[i++] = (c >> 12 & 0x0F) | 0xE0;
+    s[i++] = (c >>  6 & 0x3F) | 0x80;
+    s[i++] = (c >>  0 & 0x3F) | 0x80;
+  }
+  else if (c < 0x110000UL)
+  {
+    s[i++] = (c >> 18 & 0x07) | 0xF0;
+    s[i++] = (c >> 12 & 0x3F) | 0x80;
+    s[i++] = (c >> 6  & 0x3F) | 0x80;
+    s[i++] = (c >> 0  & 0x3F) | 0x80;
+  }
+  else
+    return "invalid codepoint";
+
+  s[i++] = '\'';
+  s[i] = '\0';
+
+  return s;
+}
 
 /* See also PDJSON5_STACK_MAX below. */
 #ifndef PDJSON5_STACK_INC
@@ -155,7 +381,7 @@ init (json_stream *json)
   json->start_lineno = 0;
   json->start_colno = 0;
   json->flags = FLAG_STREAMING;
-  json->errmsg[0] = '\0';
+  json->error_message[0] = '\0';
   json->ntokens = 0;
   json->peek = (enum json_type)0;
 
@@ -211,19 +437,9 @@ is_match (json_stream *json,
   {
     if (*p != (c = json->source.get (&json->source)))
     {
-      if (c != EOF)
-      {
-        json_error (json,
-                    "expected '%c' instead of byte '%c' in '%s'",
-                    *p, c, pattern);
-      }
-      else
-      {
-        json_error (json,
-                    "expected '%c' instead of end of text in '%s'",
-                    *p, pattern);
-      }
-
+      json_error (json,
+                  "expected '%c' instead of %s in '%s'",
+                  *p, diag_char (json, c), pattern);
       return JSON_ERROR;
     }
 
@@ -244,47 +460,49 @@ is_match (json_stream *json,
 }
 
 // Match the remainder of the string buffer assuming the first character in
-// pattern matched.
+// the pattern matched.
 //
 static enum json_type
 is_match_string (json_stream *json,
                  const char *pattern,
-                 int nextc,           // First character after the string.
-                 size_t* colno,       // Adjusted in case of an error.
+                 unsigned long nextcp, // First codepoint after the string.
+                 size_t* colno,        // Adjusted in case of an error.
                  enum json_type type)
 {
   const char *string = json->data.string + 1;
 
-  int c;
   size_t i = 0;
   for (int p; (p = pattern[i + 1]); i++)
   {
-    if (p != (c = string[i]))
+    int c = string[i];
+    if (p != c)
     {
-      if (c != '\0' || nextc != EOF)
+      if (c != '\0')
       {
         json_error (json,
-                    "expected '%c' instead of byte '%c' in '%s'",
-                    p, (c != '\0' ? c : nextc), pattern);
-
-        *colno += i + 1; // Extra for the first character.
+                    "expected '%c' instead of %s in '%s'",
+                    p, diag_char_string (json, string + i), pattern);
       }
       else
       {
         json_error (json,
-                    "expected '%c' instead of end of text in '%s'",
-                    p, pattern);
-
-        *colno += i; // Don't count EOF.
+                    "expected '%c' instead of %s in '%s'",
+                    p, diag_codepoint (json, nextcp), pattern);
       }
+
+      *colno += i;
+      if (c != '\0' || nextcp != (unsigned long)-1)
+        *colno += 1; // Plus 1 for the first character but minus 1 for EOF.
 
       return JSON_ERROR;
     }
   }
 
-  if ((c = string[i]) != '\0')
+  if (string[i] != '\0')
   {
-    json_error (json, "expected end of text instead of byte '%c'", c)
+    json_error (json,
+                "expected end of text instead of %s",
+                diag_char_string (json, string + i));
     *colno += i + 1;
     return JSON_ERROR;
   }
@@ -321,7 +539,7 @@ encode_utf8 (json_stream *json, unsigned long c)
   {
     if (c >= 0xd800 && c <= 0xdfff)
     {
-      json_error (json, "invalid codepoint %06lx", c);
+      json_error (json, "invalid codepoint 0x%06lx", c);
       return -1;
     }
 
@@ -338,7 +556,7 @@ encode_utf8 (json_stream *json, unsigned long c)
   }
   else
   {
-    json_error (json, "unable to encode %06lx as UTF-8", c);
+    json_error (json, "unable to encode 0x%06lx as UTF-8", c);
     return -1;
   }
 }
@@ -395,7 +613,9 @@ read_unicode_cp (json_stream *json)
     }
     else if ((hc = hexchar (c)) == -1)
     {
-      json_error (json, "invalid escape Unicode escape byte '%c'", c);
+      json_error (json,
+                  "invalid Unicode escape hex digit %s",
+                  diag_char (json, c));
       return -1;
     }
 
@@ -429,8 +649,9 @@ read_unicode (json_stream *json)
     }
     else if (c != '\\')
     {
-      json_error (json, "invalid continuation for surrogate pair '%c', "
-                 "expected '\\'", c);
+      json_error (json,
+                  "invalid surrogate pair continuation %s, expected '\\'",
+                  diag_char (json, c));
       return -1;
     }
 
@@ -442,8 +663,9 @@ read_unicode (json_stream *json)
     }
     else if (c != 'u')
     {
-      json_error (json, "invalid continuation for surrogate pair '%c', "
-                 "expected 'u'", c);
+      json_error (json,
+                  "invalid surrogate pair continuation %s, expected 'u'",
+                  diag_char (json, c));
       return -1;
     }
 
@@ -452,8 +674,9 @@ read_unicode (json_stream *json)
 
     if (l < 0xdc00 || l > 0xdfff)
     {
-      json_error (json, "surrogate pair continuation \\u%04lx out "
-                 "of range (dc00-dfff)", l);
+      json_error (json,
+                  "surrogate pair continuation \\u%04lx out of dc00-dfff range",
+                  l);
       return -1;
     }
 
@@ -488,7 +711,9 @@ read_latin_cp (json_stream *json)
     }
     else if ((hc = hexchar (c)) == -1)
     {
-      json_error (json, "invalid escape Latin escape byte '%c'", c);
+      json_error (json,
+                  "invalid Latin escape hex digit %s",
+                  diag_char (json, c));
       return -1;
     }
 
@@ -616,129 +841,41 @@ read_escaped (json_stream *json)
   if (u != -1)
     return pushchar (json, u);
 
-  json_error (json, "invalid escaped byte '%c'", c);
+  json_error (json, "invalid escape %s", diag_char (json, c));
   return -1;
 }
 
 static int
-utf8_seq_length (char byte)
+read_utf8 (json_stream* json, int c)
 {
-  unsigned char u = (unsigned char) byte;
-  if (u < 0x80)
-    return 1;
-
-  if (0x80 <= u && u <= 0xBF)
-  {
-    // second, third or fourth byte of a multi-byte
-    // sequence, i.e. a "continuation byte"
-    return 0;
-  }
-  else if (u == 0xC0 || u == 0xC1)
-  {
-    // overlong encoding of an ASCII byte
-    return 0;
-  }
-  else if (0xC2 <= u && u <= 0xDF)
-  {
-    // 2-byte sequence
-    return 2;
-  }
-  else if (0xE0 <= u && u <= 0xEF)
-  {
-    // 3-byte sequence
-    return 3;
-  }
-  else if (0xF0 <= u && u <= 0xF4)
-  {
-    // 4-byte sequence
-    return 4;
-  }
-  else
-  {
-    // u >= 0xF5
-    // Restricted (start of 4-, 5- or 6-byte sequence) or invalid UTF-8
-    return 0;
-  }
-}
-
-static int
-is_legal_utf8 (const unsigned char *bytes, int length)
-{
-  if (0 == bytes || 0 == length)
-    return 0;
-
-  unsigned char a;
-  const unsigned char* srcptr = bytes + length;
-  switch (length)
-  {
-  default:
-    return 0;
-    /* Everything else falls through when true. */
-  case 4:
-    if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return 0;
-    /* FALLTHRU */
-  case 3:
-    if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return 0;
-    /* FALLTHRU */
-  case 2:
-    a = (*--srcptr);
-    switch (*bytes)
-    {
-    case 0xE0:
-      if (a < 0xA0 || a > 0xBF) return 0;
-      break;
-    case 0xED:
-      if (a < 0x80 || a > 0x9F) return 0;
-      break;
-    case 0xF0:
-      if (a < 0x90 || a > 0xBF) return 0;
-      break;
-    case 0xF4:
-      if (a < 0x80 || a > 0x8F) return 0;
-      break;
-    default:
-      if (a < 0x80 || a > 0xBF) return 0;
-      break;
-    }
-    /* FALLTHRU */
-  case 1:
-    if (*bytes >= 0x80 && *bytes < 0xC2)
-      return 0;
-  }
-  return *bytes <= 0xF4;
-}
-
-static int
-read_utf8 (json_stream* json, int next_char)
-{
-  int count = utf8_seq_length (next_char);
-  if (!count)
+  size_t n = utf8_seq_length (c);
+  if (!n)
   {
     json_error (json, "%s", "invalid UTF-8 character");
     return -1;
   }
 
-  char buffer[4];
-  buffer[0] = next_char;
-  int i;
-  for (i = 1; i < count; ++i)
+  char buf[4];
+  buf[0] = c;
+  size_t i;
+  for (i = 1; i < n; ++i)
   {
-    if ((next_char = json->source.get (&json->source)) == EOF)
+    if ((c = json->source.get (&json->source)) == EOF)
       break;
 
-    buffer[i] = next_char;
+    buf[i] = c;
     json->lineadj++;
   }
 
-  if (i != count || !is_legal_utf8 ((unsigned char*) buffer, count))
+  if (i != n || !is_legal_utf8 ((unsigned char*)buf, n))
   {
     json_error (json, "%s", "invalid UTF-8 text");
     return -1;
   }
 
-  for (i = 0; i < count; ++i)
+  for (i = 0; i < n; ++i)
   {
-    if (pushchar (json, buffer[i]) != 0)
+    if (pushchar (json, buf[i]) != 0)
       return -1;
   }
 
@@ -828,17 +965,11 @@ read_dec_digits (json_stream *json)
 
   if (nread == 0)
   {
-    json->source.get (&json->source); // For column.
+    json->source.get (&json->source); // Consume.
 
-    if (c != EOF)
-    {
-      json_error (json, "expected digit instead of byte '%c'", c);
-    }
-    else
-    {
-      json_error (json, "%s", "expected digit instead of end of text");
-    }
-
+    json_error (json,
+                "expected digit instead of %s",
+                diag_char (json, c));
     return -1;
   }
 
@@ -869,17 +1000,9 @@ read_hex_digits (json_stream *json)
 
   if (nread == 0)
   {
-    json->source.get (&json->source); // For column.
+    json->source.get (&json->source); // Consume.
 
-    if (c != EOF)
-    {
-      json_error (json, "expected hex digit instead of byte '%c'", c);
-    }
-    else
-    {
-      json_error (json, "%s", "expected hex digit instead of end of text");
-    }
-
+    json_error (json, "expected hex digit instead of %s", diag_char (json, c));
     return -1;
   }
 
@@ -912,15 +1035,7 @@ read_number (json_stream *json, int c)
     }
     else
     {
-      if (c != EOF)
-      {
-        json_error (json, "unexpected byte '%c' in number", c);
-      }
-      else
-      {
-        json_error (json, "%s", "unexpected end of text in number");
-      }
-
+      json_error (json, "unexpected %s in number", diag_char (json, c));
       return JSON_ERROR;
     }
   }
@@ -1028,16 +1143,9 @@ read_number (json_stream *json, int c)
     }
     else
     {
-      json->source.get (&json->source); // Consume (for column).
-      if (c != EOF)
-      {
-        json_error (json, "unexpected byte '%c' in number", c);
-      }
-      else
-      {
-        json_error (json, "%s", "unexpected end of text in number");
-      }
+      json->source.get (&json->source); // Consume.
 
+      json_error (json, "unexpected %s in number", diag_char (json, c));
       return JSON_ERROR;
     }
   }
@@ -1046,7 +1154,7 @@ read_number (json_stream *json, int c)
 }
 
 bool
-json_isspace (json_stream *json, int c)
+is_space (json_stream *json, int c)
 {
   switch (c)
   {
@@ -1058,19 +1166,96 @@ json_isspace (json_stream *json, int c)
 
     // See Chapter 8, "White Space" in the JSON5 spec.
     //
-    // @@ TODO: handle Unicode Zs category.
-    //
   case '\f':
   case '\v':
-  case 0xa0:
-  case 0x2028:
-  case 0x2029:
-  case 0xFEFF:
     return json->flags & FLAG_JSON5;
 
   default:
     return false;
   }
+}
+
+// Given the first byte (consumed), read and decode a multi-byte UTF-8
+// sequence. Return true if it is a space, setting codepoint to the decoded
+// value if not NULL. Trigger an error and return false if it's not.
+//
+static bool
+read_space (json_stream *json, int c, unsigned long* cp)
+{
+#if 0
+  assert (c != EOF && c >= 0x80);
+#endif
+
+  size_t i = 1;
+  unsigned char *s = (unsigned char*)json->utf8_char;
+
+  s[i++] = c;
+
+  // See Chapter 8, "White Space" in the JSON5 spec.
+  //
+  // @@ TODO: handle Unicode Zs category.
+  //
+  // For now recognize the four JSON5E spaces ad hoc, without decoding
+  // the sequence into the codepoint:
+  //
+  // U+00A0 - 0xC2 0xA0       (non-breaking space)
+  // U+2028 - 0xE2 0x80 0xA8  (line seperator)
+  // U+2029 - 0xE2 0x80 0xA9  (paragraph separator)
+  // U+FEFF - 0xEF 0xBB 0xBF  (byte order marker)
+  //
+  size_t n = utf8_seq_length (c);
+
+  const char* r = NULL;
+  if (n != 0)
+  {
+    size_t j;
+    for (j = 1; j != n; ++j)
+    {
+      if ((c = json->source.get (&json->source)) == EOF)
+        break;
+
+      s[i++] = c;
+      json->lineadj++;
+    }
+
+    if (j == n && is_legal_utf8 ((unsigned char*)s + 1, n))
+    {
+      if (n == 2 && s[1] == 0xC2 && s[2] == 0xA0)
+      {
+        if (cp != NULL) *cp = 0xA0;
+      }
+      else if (n == 3 &&
+               s[1] == 0xE2 && s[2] == 0x80 && (s[3] == 0xA8 || s[3] == 0xA9))
+      {
+        if (cp != NULL) *cp = (s[3] == 0xA8 ? 0x2028 : 0x2029);
+      }
+      else if (n == 3 && s[1] == 0xEF && s[2] == 0xBB && s[3] == 0xBF)
+      {
+        if (cp != NULL) *cp = 0xFEFF;
+      }
+      else
+      {
+        s[0]   = '\'';
+        s[i++] = '\'';
+        s[i]   = '\0';
+        r = (const char*)s;
+      }
+    }
+    else
+      r = "invalid UTF-8 sequence";
+  }
+  else
+    r = "invalid UTF-8 sequence";
+
+  if (r == NULL)
+    return true;
+
+  // Issuing diagnostics identical to the single-byte case would require
+  // examining the context (are we inside an array, object, after name or
+  // value inside the object, etc). See we keep it generic for now.
+  //
+  json_error (json, "unexpected Unicode character %s outside of string", r);
+  return false;
 }
 
 static void
@@ -1144,20 +1329,97 @@ skip_comment (json_stream *json, int c)
   return c;
 }
 
+bool
+json_is_space (json_stream *json, int c)
+{
+  return is_space (json, c);
+}
+
+int
+json_skip_if_space (json_stream *json, int c, unsigned long* cp)
+{
+  json->start_lineno = 0;
+  json->start_colno = 0;
+
+  if (c == EOF)
+    return 0;
+
+  if (is_space (json, c))
+  {
+    json->source.get (&json->source); // Consume.
+
+    if (c == '\n')
+      newline (json);
+
+    if (cp != NULL)
+      *cp = (unsigned long)c;
+
+    return 1;
+  }
+
+  if ((unsigned int)c >= 0x80)
+  {
+    json->source.get (&json->source); // Consume.
+
+    return read_space (json, c, cp) ? 1 : -1;
+  }
+
+  if ((c == '/' && (json->flags & FLAG_JSON5)) ||
+      (c == '#' && (json->flags & FLAG_JSON5E)))
+  {
+    json->source.get (&json->source); // Consume.
+
+    size_t lineno = json_get_lineno (json);
+    size_t colno = json_get_column (json);
+
+    if (c == '/')
+    {
+      c = json->source.peek (&json->source);
+
+      if (c != '/' && c != '*')
+      {
+        // Have to diagnose here since consumed.
+        //
+        json_error (json, "%s", "unexpected '/'");
+        return -1;
+      }
+
+      json->source.get (&json->source);
+    }
+
+    skip_comment (json, c);
+
+    if (json->flags & FLAG_ERROR)
+      return -1;
+
+    // Point to the beginning of comment.
+    //
+    json->start_lineno = lineno;
+    json->start_colno = colno;
+
+    if (cp != NULL)
+      *cp = (unsigned long)c;
+
+    return 1;
+  }
+
+  return 0;
+}
+
 // Returns the next non-whitespace (and non-comment, for JSON5) character in
 // the stream. If newline was seen, set FLAG_NEWLINE. This function can fail
 // by returning EOF and setting the error flag.
 //
-// Note that this and the peek() below are the only functions (besides the
-// user-facing json_source_get()) that need to worry about newline
-// housekeeping.
+// Note that this is the only function (besides the user-facing
+// json_source_get()) that needs to worry about newline housekeeping.
 //
 // Note also that we currently don't treat sole \r as a newline for the
 // line/column counting purposes, even though JSON5 treats it as such (in
 // comment end, line continuations). Doing that would require counting the
-// \r\n sequence as a single newline. So we keep it simple for now.
+// \r\n sequence as a single newline. So while it can probably be done, we
+// keep it simple for now.
 //
-// We will also require \n to be able to omit `,` in JSON5E.
+// We will also require \n, not just \r, to be able to omit `,` in JSON5E.
 //
 static int
 next (json_stream *json)
@@ -1169,7 +1431,7 @@ next (json_stream *json)
   {
     c = json->source.get (&json->source);
 
-    if (json_isspace (json, c))
+    if (is_space (json, c))
     {
       if (c == '\n')
       {
@@ -1180,18 +1442,26 @@ next (json_stream *json)
       continue;
     }
 
-    if (c == '/' && (json->flags & FLAG_JSON5))
+    if (c != EOF && (unsigned int)c >= 0x80)
     {
-      int p = json->source.peek (&json->source);
-      if (p == '/' || p == '*')
-      {
-        json->source.get (&json->source);
-        if ((c = skip_comment (json, p)) != EOF)
-          continue;
-      }
+      if (!read_space (json, c, NULL))
+        return EOF; // Error is set.
+
+      continue;
     }
-    else if (c == '#' && (json->flags & FLAG_JSON5E))
+
+    if ((c == '/' && (json->flags & FLAG_JSON5)) ||
+        (c == '#' && (json->flags & FLAG_JSON5E)))
     {
+      if (c == '/')
+      {
+        int p = json->source.peek (&json->source);
+        if (p == '/' || p == '*')
+          c = json->source.get (&json->source);
+        else
+          break;
+      }
+
       if ((c = skip_comment (json, c)) != EOF)
         continue;
     }
@@ -1201,6 +1471,8 @@ next (json_stream *json)
   return c;
 }
 
+// The passed character is expected to be consumed.
+//
 static enum json_type
 read_value (json_stream *json, int c)
 {
@@ -1263,7 +1535,7 @@ read_value (json_stream *json, int c)
 
   if (type == 0)
   {
-    json_error (json, "unexpected byte '%c' in value", c);
+    json_error (json, "unexpected %s in value", diag_char (json, c));
     type = JSON_ERROR;
   }
 
@@ -1428,7 +1700,9 @@ json_next (json_stream *json)
 
         if (c != EOF)
         {
-          json_error (json, "expected end of text instead of byte '%c'", c);
+          json_error (json,
+                      "expected end of text instead of %s",
+                      diag_char (json, c));
           return JSON_ERROR;
         }
       }
@@ -1627,7 +1901,6 @@ json_next (json_stream *json)
     // - Line/columns numbers for implied `{` and `}` are of the first
     //   member name and EOF, respectively.
     //
-    //
     if ((json->flags & FLAG_JSON5E) &&
         !(json->flags & FLAG_STREAMING))
     {
@@ -1654,37 +1927,57 @@ json_next (json_stream *json)
         // diagnostics (both message and location-wise) as would be issued in
         // the non-extended mode.
         //
-        // Save the next character after the name for diagnostics below.
+        // Save the first codepoint after the name as next codepoint for
+        // diagnostics below.
         //
-        int nc = json->source.peek (&json->source);
-        for (c = nc; ; c = json->source.peek (&json->source))
+        // Note that this loop could probably be optimized at the expense of
+        // readability (and it is already quite hairy). However, in common
+        // cases we don't expect to make more than a few iterations.
+        //
+        unsigned long ncp;
+        for (bool first = true; ; first = false)
         {
-          if (!json_isspace (json, c) && c != '/' && c != '#')
-            break;
+          c = json->source.peek (&json->source);
+
+          if (first)
+          {
+            if (c == EOF)                    ncp = (unsigned long)-1;
+            else if ((unsigned int)c < 0x80) ncp = c;
+          }
+
+          if (!is_space (json, c) && c != '/' && c != '#')
+          {
+            if (c == EOF || (unsigned int)c < 0x80)
+              break;
+
+            // Skip if whitespace or diagnose right away multi-byte UTF-8
+            // sequence identical to the non-extended mode. Save decoded
+            // codepoint if first.
+            //
+            json->source.get (&json->source); // Consume;
+
+            if (!read_space (json, c, first ? &ncp : NULL))
+              return JSON_ERROR;
+
+            continue;
+          }
 
           json->source.get (&json->source);
 
           if (c == '\n')
             newline (json);
-          else if (c == '/')
-          {
-            int p = json->source.peek (&json->source);
-            if (p == '/' || p == '*')
-            {
-              json->source.get (&json->source);
-              if ((c = skip_comment (json, p)) == EOF)
-              {
-                if (json->flags & FLAG_ERROR)
-                  return JSON_ERROR;
 
-                break;
-              }
-            }
-            else
-              break; // Diagnose read '/' below.
-          }
-          else if (c == '#')
+          else if (c == '/' || c == '#')
           {
+            if (c == '/')
+            {
+              int p = json->source.peek (&json->source);
+              if (p == '/' || p == '*')
+                c = json->source.get (&json->source);
+              else
+                break; // Diagnose consumed '/' below.
+            }
+
             if ((c = skip_comment (json, c)) == EOF)
             {
               if (json->flags & FLAG_ERROR)
@@ -1724,24 +2017,24 @@ json_next (json_stream *json)
             switch (json->data.string[0])
             {
             case 'n':
-              type = is_match_string (json, "null", nc , &colno, JSON_NULL);
+              type = is_match_string (json, "null", ncp , &colno, JSON_NULL);
               break;
             case 't':
-              type = is_match_string (json, "true", nc , &colno, JSON_TRUE);
+              type = is_match_string (json, "true", ncp , &colno, JSON_TRUE);
               break;
             case 'f':
-              type = is_match_string (json, "false", nc , &colno, JSON_FALSE);
+              type = is_match_string (json, "false", ncp , &colno, JSON_FALSE);
               break;
             case 'I':
-              type = is_match_string (json, "Infinity", nc , &colno, JSON_NUMBER);
+              type = is_match_string (json, "Infinity", ncp , &colno, JSON_NUMBER);
               break;
             case 'N':
-              type = is_match_string (json, "NaN", nc , &colno, JSON_NUMBER);
+              type = is_match_string (json, "NaN", ncp , &colno, JSON_NUMBER);
               break;
             default:
               json_error (json,
-                          "unexpected byte '%c' in value",
-                          json->data.string[0]);
+                          "unexpected %s in value",
+                          diag_char_string (json, json->data.string));
               type = JSON_ERROR;
             }
           }
@@ -1749,12 +2042,14 @@ json_next (json_stream *json)
             type = JSON_STRING;
 
           // Per the above comment handling logic, if the character we are
-          // looking at is `/`, then it is read, not peeked at, and so we
+          // looking at is `/`, then it is consumed, not peeked at, and so we
           // have to diagnose it here.
           //
           if (type != JSON_ERROR && c == '/')
           {
-            json_error (json, "expected end of text instead of byte '%c'", c)
+            json_error (json,
+                        "expected end of text instead of %s",
+                        diag_char (json, c));
             return JSON_ERROR; // Don't override location.
           }
         }
@@ -1762,7 +2057,7 @@ json_next (json_stream *json)
         // Note: set even in case of an error since peek() above moved the
         // position past the name/value.
         //
-        json->lineno = lineno;
+        json->start_lineno = lineno;
         json->start_colno = colno;
 
         return type;
@@ -1800,7 +2095,7 @@ json_reset (json_stream *json)
   json->stack_top = (size_t)-1;
   json->ntokens = 0;
   json->flags &= ~(FLAG_ERROR | FLAG_IMPLIED_END);
-  json->errmsg[0] = '\0';
+  json->error_message[0] = '\0';
 }
 
 enum json_type
@@ -1870,7 +2165,7 @@ json_get_number (json_stream *json)
 const char *
 json_get_error (json_stream *json)
 {
-  return json->flags & FLAG_ERROR ? json->errmsg : NULL;
+  return json->flags & FLAG_ERROR ? json->error_message : NULL;
 }
 
 size_t
