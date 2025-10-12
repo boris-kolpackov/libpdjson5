@@ -16,6 +16,18 @@ $* <"$\tnull" >>EOO
   1,  2: <null>
 EOO
 
+: unicode-in-diag-1
+:
+$* <'tru𐀀' 2>>EOE !=0
+<stdin>:1:4: error: expected 'e' instead of '𐀀' in 'true'
+EOE
+
+: unicode-in-diag-2
+:
+$* <:"𐀀rue" 2>>EOE !=0
+<stdin>:1:1: error: unexpected Unicode character '𐀀' outside of string
+EOE
+
 : number
 :
 {{
@@ -91,7 +103,7 @@ EOO
   : This surrogate half must precede another half.
   :
   $* <'"\uD800\u0065"' 2>>EOE !=0
-  <stdin>:1:13: error: surrogate pair continuation \u0065 out of range (dc00-dfff)
+  <stdin>:1:13: error: surrogate pair continuation \u0065 out of dc00-dfff range
   EOE
 
   : invalid-surrogate-alone
@@ -153,7 +165,7 @@ EOO
   EOE
 }}
 
-: stream
+: streaming
 {{
   : number
   :
@@ -195,5 +207,21 @@ EOO
     2,  1: 10
     3,  1: 100
     4,  2: 2002
+  EOO
+
+  : separation-custom
+  :
+  $* --streaming --separator <"1$\n10 $\n100 $\n 2002" >>EOO
+    1,  1: 1
+    2,  0: <0x00000a>
+    2,  1: 10
+    2,  3: <0x000020>
+    3,  0: <0x00000a>
+    3,  1: 100
+    3,  4: <0x000020>
+    4,  0: <0x00000a>
+    4,  1: <0x000020>
+    4,  2: 2002
+    5,  0: <0x00000a>
   EOO
 }}

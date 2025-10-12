@@ -1,6 +1,7 @@
 // Usage: driver [<options>]
 //
-// --streaming  --  enable streaming/multi-value mode
+// --streaming  --  enable streaming mode
+// --separator  --  handle/print value separors in streaming mode
 // --json5      --  accept JSON5 input
 // --json5e     --  accept JSON5E input
 //
@@ -19,7 +20,8 @@
 int
 main (int argc, char *argv[])
 {
-  bool streaming  = false;
+  bool streaming = false;
+  bool separator = false;
   enum json_language language = json_language_json;
 
   for (int i = 1; i < argc; ++i)
@@ -28,6 +30,8 @@ main (int argc, char *argv[])
 
     if (strcmp (a, "--streaming") == 0)
       streaming = true;
+    else if (strcmp (a, "--separator") == 0)
+      separator = true;
     else if (strcmp (a, "--json5") == 0)
       language = json_language_json5;
     else if (strcmp (a, "--json5e") == 0)
@@ -37,6 +41,12 @@ main (int argc, char *argv[])
       fprintf (stderr, "error: unexpected argument '%s'\n", a);
       return 1;
     }
+  }
+
+  if (separator && !streaming)
+  {
+    fprintf (stderr, "error: --separator specified without --streaming\n");
+    return 1;
   }
 
   json_stream json;
@@ -59,6 +69,28 @@ main (int argc, char *argv[])
       // Second JSON_DONE in the streamig mode is the end of multi-value.
       //
       if (!streaming || first)
+        break;
+
+      if (separator)
+      {
+        unsigned long cp;
+        int r;
+        while ((r = json_skip_if_space (&json, json_source_peek (&json), &cp)))
+        {
+          if (r == -1)
+          {
+            t = JSON_ERROR;
+            break;
+          }
+
+          printf ("%3zu,%3zu: <0x%06lx>\n",
+                  json_get_lineno (&json),
+                  json_get_column (&json),
+                  cp);
+        }
+      }
+
+      if (t == JSON_ERROR)
         break;
 
       json_reset (&json);
