@@ -24,20 +24,6 @@
 #define FLAG_NEWLINE      0x10U // Newline seen by last call to next().
 #define FLAG_IMPLIED_END  0x20U // Implied top-level object end is pending.
 
-#if defined(_MSC_VER) && (_MSC_VER < 1900)
-
-#define json_error(json, format, ...)                               \
-  if (!(json->flags & FLAG_ERROR))                                  \
-  {                                                                 \
-    json->flags |= FLAG_ERROR;                                      \
-    _snprintf_s (json->error_message, sizeof (json->error_message), \
-                 _TRUNCATE,                                         \
-                 format,                                            \
-                 __VA_ARGS__);                                      \
-  }
-
-#else
-
 #define json_error(json, format, ...)                             \
   if (!(json->flags & FLAG_ERROR))                                \
   {                                                               \
@@ -46,8 +32,6 @@
               format,                                             \
               __VA_ARGS__);                                       \
   }
-
-#endif /* _MSC_VER */
 
 static size_t
 utf8_seq_length (char byte)
