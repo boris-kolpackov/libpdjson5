@@ -78,13 +78,13 @@ retrieved.
 enum json_type json_next(json_stream *json);
 enum json_type json_peek(json_stream *json);
 
-const char *json_get_string(json_stream *json, size_t *length);
-double json_get_number(json_stream *json);
+const char *json_get_name(json_stream *json, size_t *size);
+const char *json_get_value(json_stream *json, size_t *size);
 ```
 
-Numbers can also be retrieved by `json_get_string()`, which will
-return the raw text number as it appeared in the JSON. This is useful
-if better precision is required.
+Both strings and numbers are retrieved with `json_get_value()`. For numbers it
+will return the raw text number as it appeared in the JSON input text. If
+required, you will need to parse it into a suitable numeric type yourself.
 
 In the case of a parse error, the event will be `JSON_ERROR`. The
 stream cannot be used again until it is reset. In the event of an
@@ -99,7 +99,7 @@ size_t json_get_position(json_stream *json);
 ```
 
 Outside of errors, a `JSON_OBJECT` event will always be followed by
-zero or more pairs of `JSON_STRING` (member name) events and their
+zero or more pairs of `JSON_NAME` (member name) events and their
 associated value events. That is, the stream of events will always be
 logical and consistent.
 
