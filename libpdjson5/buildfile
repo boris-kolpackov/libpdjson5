@@ -14,10 +14,10 @@ h{version}: in{version} $src_root/manifest
 #
 c.poptions =+ "-I$out_root" "-I$src_root"
 
-c.poptions += -DPDJSON5_STACK_INC=16 -DPDJSON5_STACK_MAX=2048
+c.poptions += -DLIBPDJSON5_STACK_INC=16 -DLIBPDJSON5_STACK_MAX=2048
 
 if ($c.target.class == 'windows')
-  objs{*}: c.poptions += '-DPDJSON5_SYMEXPORT=__declspec(dllexport)'
+  objs{*}: c.poptions += '-DLIBPDJSON5_SYMEXPORT=__declspec(dllexport)'
 
 # Export options.
 #

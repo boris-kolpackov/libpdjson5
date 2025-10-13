@@ -4,7 +4,7 @@
 #  error incompatible _POSIX_C_SOURCE level
 #endif
 
-#ifndef PDJSON5_H
+#ifndef LIBPDJSON5_PDJSON5_H
 #  include "pdjson5.h"
 #endif
 
@@ -258,9 +258,9 @@ diag_codepoint (json_stream *json, unsigned long c)
   return s;
 }
 
-/* See also PDJSON5_STACK_MAX below. */
-#ifndef PDJSON5_STACK_INC
-#  define PDJSON5_STACK_INC 4
+/* See also LIBPDJSON5_STACK_MAX below. */
+#ifndef LIBPDJSON5_STACK_INC
+#  define LIBPDJSON5_STACK_INC 4
 #endif
 
 struct json_stack
@@ -274,8 +274,8 @@ push (json_stream *json, enum json_type type)
 {
   size_t new_stack_top = json->stack_top + 1;
 
-#ifdef PDJSON5_STACK_MAX
-  if (new_stack_top > PDJSON5_STACK_MAX)
+#ifdef LIBPDJSON5_STACK_MAX
+  if (new_stack_top > LIBPDJSON5_STACK_MAX)
   {
     json_error (json, "%s", "maximum depth of nesting reached");
     return JSON_ERROR;
@@ -284,7 +284,7 @@ push (json_stream *json, enum json_type type)
 
   if (new_stack_top >= json->stack_size)
   {
-    size_t size = (json->stack_size + PDJSON5_STACK_INC) * sizeof (*json->stack);
+    size_t size = (json->stack_size + LIBPDJSON5_STACK_INC) * sizeof (*json->stack);
     struct json_stack *stack =
       (struct json_stack *)json->alloc.realloc (json->stack, size); // THROW
     if (stack == NULL)
@@ -293,7 +293,7 @@ push (json_stream *json, enum json_type type)
       return JSON_ERROR;
     }
 
-    json->stack_size += PDJSON5_STACK_INC;
+    json->stack_size += LIBPDJSON5_STACK_INC;
     json->stack = stack;
   }
 
