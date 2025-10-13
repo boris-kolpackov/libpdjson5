@@ -203,7 +203,7 @@ diag_char_string (json_stream *json, const char* u)
   s[i++] = c;
 
   size_t n = utf8_seq_length (c);
-  for (size_t j = 1; j != n; ++j)
+  for (size_t j = 1; j < n; ++j)
     s[i++] = u[j];
 
   s[i++] = '\'';
