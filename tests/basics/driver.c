@@ -125,8 +125,14 @@ main (int argc, char *argv[])
     case JSON_FALSE:
       printf ("<false>\n");
       break;
-    case JSON_NUMBER:
+    case JSON_NAME:
+      {
+        size_t n;
+        assert (json_get_context (&json, &n) == JSON_OBJECT && n % 2 != 0);
+      }
+      // Fall through.
     case JSON_STRING:
+    case JSON_NUMBER:
       {
         size_t n;
         const char* s = json_get_string (&json, &n);
@@ -134,14 +140,7 @@ main (int argc, char *argv[])
 
         // Print numbers and object member names without quoted.
         //
-        const char* fmt;
-        if (t == JSON_STRING &&
-            (json_get_context (&json, &n) != JSON_OBJECT || n % 2 == 0))
-          fmt = "\"%s\"\n";
-        else
-          fmt = "%s\n";
-
-        printf (fmt, s);
+        printf (t == JSON_STRING ? "\"%s\"\n" : "%s\n", s);
         break;
       }
     case JSON_ARRAY:
