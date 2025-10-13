@@ -8,8 +8,9 @@
 #  include "pdjson5.h"
 #endif
 
-#include <stdlib.h> // malloc()/realloc()/free()
-#include <string.h> // strlen()
+#include <stdlib.h>   // malloc()/realloc()/free()
+#include <string.h>   // strlen()
+#include <inttypes.h> // PR*
 
 // Feature flags.
 //
@@ -215,12 +216,12 @@ diag_char_string (json_stream *json, const char* u)
 // As above but for the decoded codepoint.
 //
 static const char *
-diag_codepoint (json_stream *json, unsigned long c)
+diag_codepoint (json_stream *json, uint32_t c)
 {
-  if (c == (unsigned long)-1 /*EOF*/)
+  if (c == (uint32_t)-1 /*EOF*/)
     return diag_char (json, EOF);
 
-  if (c < 0x80UL)
+  if (c < 0x80)
     return diag_char (json, (int)c);
 
   size_t i = 0;
@@ -228,12 +229,12 @@ diag_codepoint (json_stream *json, unsigned long c)
 
   s[i++] = '\'';
 
-  if (c < 0x0800UL)
+  if (c < 0x0800)
   {
     s[i++] = (c >> 6 & 0x1F) | 0xC0;
     s[i++] = (c >> 0 & 0x3F) | 0x80;
   }
-  else if (c < 0x010000UL)
+  else if (c < 0x010000)
   {
     if (c >= 0xd800 && c <= 0xdfff)
       return "invalid codepoint";
@@ -242,7 +243,7 @@ diag_codepoint (json_stream *json, unsigned long c)
     s[i++] = (c >>  6 & 0x3F) | 0x80;
     s[i++] = (c >>  0 & 0x3F) | 0x80;
   }
-  else if (c < 0x110000UL)
+  else if (c < 0x110000)
   {
     s[i++] = (c >> 18 & 0x07) | 0xF0;
     s[i++] = (c >> 12 & 0x3F) | 0x80;
@@ -448,7 +449,7 @@ is_match (json_stream *json,
 static enum json_type
 is_match_string (json_stream *json,
                  const char *pattern,
-                 unsigned long nextcp, // First codepoint after the string.
+                 uint32_t nextcp,      // First codepoint after the string.
                  uint64_t* colno,      // Adjusted in case of an error.
                  enum json_type type)
 {
@@ -474,7 +475,7 @@ is_match_string (json_stream *json,
       }
 
       *colno += i;
-      if (c != '\0' || nextcp != (unsigned long)-1)
+      if (c != '\0' || nextcp != (uint32_t)-1)
         *colno += 1; // Plus 1 for the first character but minus 1 for EOF.
 
       return JSON_ERROR;
@@ -507,22 +508,22 @@ init_string (json_stream *json)
 }
 
 static int
-encode_utf8 (json_stream *json, unsigned long c)
+encode_utf8 (json_stream *json, uint32_t c)
 {
-  if (c < 0x80UL)
+  if (c < 0x80)
   {
     return pushchar (json, c);
   }
-  else if (c < 0x0800UL)
+  else if (c < 0x0800)
   {
     return !((pushchar (json, (c >> 6 & 0x1F) | 0xC0) == 0) &&
              (pushchar (json, (c >> 0 & 0x3F) | 0x80) == 0));
   }
-  else if (c < 0x010000UL)
+  else if (c < 0x010000)
   {
-    if (c >= 0xd800 && c <= 0xdfff)
+    if (c >= 0xD800 && c <= 0xDFFF)
     {
-      json_error (json, "invalid codepoint 0x%06lx", c);
+      json_error (json, "invalid codepoint U+%04" PRIX32, c);
       return -1;
     }
 
@@ -530,7 +531,7 @@ encode_utf8 (json_stream *json, unsigned long c)
              (pushchar (json, (c >>  6 & 0x3F) | 0x80) == 0) &&
              (pushchar (json, (c >>  0 & 0x3F) | 0x80) == 0));
   }
-  else if (c < 0x110000UL)
+  else if (c < 0x110000)
   {
     return !((pushchar (json, (c >> 18 & 0x07) | 0xF0) == 0) &&
              (pushchar (json, (c >> 12 & 0x3F) | 0x80) == 0) &&
@@ -539,7 +540,7 @@ encode_utf8 (json_stream *json, unsigned long c)
   }
   else
   {
-    json_error (json, "unable to encode 0x%06lx as UTF-8", c);
+    json_error (json, "unable to encode U+%04" PRIX32 " as UTF-8", c);
     return -1;
   }
 }
@@ -576,13 +577,13 @@ hexchar (int c)
   }
 }
 
-// Read 4-digit hex number in \uHHHH.
+// Read 4-digit hex number in \uHHHH. Return (uint32_t)-1 if invalid.
 //
-static long
+static uint32_t
 read_unicode_cp (json_stream *json)
 {
-  long cp = 0;
-  int shift = 12;
+  uint32_t cp = 0;
+  unsigned int shift = 12;
 
   for (size_t i = 0; i < 4; i++)
   {
@@ -592,17 +593,17 @@ read_unicode_cp (json_stream *json)
     if (c == EOF)
     {
       json_error (json, "%s", "unterminated string literal in Unicode escape");
-      return -1;
+      return (uint32_t)-1;
     }
     else if ((hc = hexchar (c)) == -1)
     {
       json_error (json,
                   "invalid Unicode escape hex digit %s",
                   diag_char (json, c));
-      return -1;
+      return (uint32_t)-1;
     }
 
-    cp += hc * (1 << shift);
+    cp += (unsigned int)hc * (1U << shift);
     shift -= 4;
   }
 
@@ -612,12 +613,12 @@ read_unicode_cp (json_stream *json)
 static int
 read_unicode (json_stream *json)
 {
-  long cp, h, l;
+  uint32_t cp, h, l;
 
-  if ((cp = read_unicode_cp (json)) == -1)
+  if ((cp = read_unicode_cp (json)) == (uint32_t)-1)
     return -1;
 
-  if (cp >= 0xd800 && cp <= 0xdbff)
+  if (cp >= 0xD800 && cp <= 0xDBFF)
   {
     /* This is the high portion of a surrogate pair; we need to read the
      * lower portion to get the codepoint
@@ -652,35 +653,36 @@ read_unicode (json_stream *json)
       return -1;
     }
 
-    if ((l = read_unicode_cp (json)) == -1)
+    if ((l = read_unicode_cp (json)) == (uint32_t)-1)
       return -1;
 
-    if (l < 0xdc00 || l > 0xdfff)
+    if (l < 0xDC00 || l > 0xDFFF)
     {
       json_error (json,
-                  "surrogate pair continuation \\u%04lx out of dc00-dfff range",
+                  "surrogate pair continuation \\u%04" PRIX32
+                  " out of DC00-DFFF range",
                   l);
       return -1;
     }
 
-    cp = ((h - 0xd800) * 0x400) + ((l - 0xdc00) + 0x10000);
+    cp = ((h - 0xD800) * 0x400) + ((l - 0xDC00) + 0x10000);
   }
-  else if (cp >= 0xdc00 && cp <= 0xdfff)
+  else if (cp >= 0xDC00 && cp <= 0xDFFF)
   {
-    json_error (json, "dangling surrogate \\u%04lx", cp);
+    json_error (json, "dangling surrogate \\u%04" PRIX32, cp);
     return -1;
   }
 
   return encode_utf8 (json, cp);
 }
 
-// Read 4-digit hex number in \xHH.
+// Read 4-digit hex number in \xHH. Return (uint32_t)-1 if invalid.
 //
-static long
+static uint32_t
 read_latin_cp (json_stream *json)
 {
-  long cp = 0;
-  int shift = 4;
+  uint32_t cp = 0;
+  unsigned int shift = 4;
 
   for (size_t i = 0; i < 2; i++)
   {
@@ -700,7 +702,7 @@ read_latin_cp (json_stream *json)
       return -1;
     }
 
-    cp += hc * (1 << shift);
+    cp += (unsigned int)hc * (1U << shift);
     shift -= 4;
   }
 
@@ -710,9 +712,9 @@ read_latin_cp (json_stream *json)
 static int
 read_latin (json_stream *json)
 {
-  long cp;
+  uint32_t cp;
 
-  if ((cp = read_latin_cp (json)) == -1)
+  if ((cp = read_latin_cp (json)) == (uint32_t)-1)
     return -1;
 
   return encode_utf8 (json, cp);
@@ -1163,10 +1165,10 @@ is_space (json_stream *json, int c)
 // value if not NULL. Trigger an error and return false if it's not.
 //
 static bool
-read_space (json_stream *json, int c, unsigned long* cp)
+read_space (json_stream *json, int c, uint32_t* cp)
 {
 #if 0
-  assert (c != EOF && c >= 0x80);
+  assert (c != EOF && (unsigned int)c >= 0x80);
 #endif
 
   size_t i = 1;
@@ -1319,7 +1321,7 @@ json_is_space (json_stream *json, int c)
 }
 
 int
-json_skip_if_space (json_stream *json, int c, unsigned long* cp)
+json_skip_if_space (json_stream *json, int c, uint32_t* cp)
 {
   json->start_lineno = 0;
   json->start_colno = 0;
@@ -1335,7 +1337,7 @@ json_skip_if_space (json_stream *json, int c, unsigned long* cp)
       newline (json);
 
     if (cp != NULL)
-      *cp = (unsigned long)c;
+      *cp = (uint32_t)c;
 
     return 1;
   }
@@ -1381,7 +1383,7 @@ json_skip_if_space (json_stream *json, int c, unsigned long* cp)
     json->start_colno = colno;
 
     if (cp != NULL)
-      *cp = (unsigned long)c;
+      *cp = (uint32_t)c;
 
     return 1;
   }
@@ -1917,15 +1919,15 @@ json_next (json_stream *json)
         // readability (and it is already quite hairy). However, in common
         // cases we don't expect to make more than a few iterations.
         //
-        unsigned long ncp;
+        uint32_t ncp;
         for (bool first = true; ; first = false)
         {
           c = json->source.peek (&json->source);
 
           if (first)
           {
-            if (c == EOF)                    ncp = (unsigned long)-1;
-            else if ((unsigned int)c < 0x80) ncp = c;
+            if (c == EOF)                    ncp = (uint32_t)-1;
+            else if ((unsigned int)c < 0x80) ncp = (uint32_t)c;
           }
 
           if (!is_space (json, c) && c != '/' && c != '#')
