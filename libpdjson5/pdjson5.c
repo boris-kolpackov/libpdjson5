@@ -4,13 +4,12 @@
 #  error incompatible _POSIX_C_SOURCE level
 #endif
 
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-
 #ifndef PDJSON5_H
 #  include "pdjson5.h"
 #endif
+
+#include <stdlib.h> // malloc()/realloc()/free()
+#include <string.h> // strlen()
 
 // Feature flags.
 //
@@ -2137,13 +2136,6 @@ json_get_string (json_stream *json, size_t *length)
     return "";
   else
     return json->data.string;
-}
-
-double
-json_get_number (json_stream *json)
-{
-  char *p = json->data.string;
-  return p == NULL ? 0 : strtod (p, NULL);
 }
 
 const char *
