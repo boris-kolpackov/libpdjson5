@@ -32,6 +32,7 @@ parse (const void *data, size_t size,
     }
 
     /* Let's get a warning if any new values are added. */
+    size_t n;
     switch (t)
     {
     case JSON_ERROR:
@@ -41,7 +42,7 @@ parse (const void *data, size_t size,
       assert (json_get_string (json, NULL) != NULL);
       break;
     case JSON_NUMBER:
-      json_get_number (json);
+      assert (json_get_string (json, &n) != NULL && n != 0);
       break;
     case JSON_OBJECT:
       assert (json_get_context (json, NULL) == JSON_OBJECT);

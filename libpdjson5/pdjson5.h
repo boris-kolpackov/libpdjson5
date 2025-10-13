@@ -21,6 +21,7 @@ extern "C"
 #endif /* __cplusplus */
 
 #include <stdio.h>
+#include <stddef.h> // size_t
 
 enum json_type
 {
@@ -78,7 +79,6 @@ PDJSON5_SYMEXPORT void json_reset (json_stream *json);
 // Note that the returned length includes trailing `\0`.
 //
 PDJSON5_SYMEXPORT const char *json_get_string (json_stream *json, size_t *length);
-PDJSON5_SYMEXPORT double json_get_number (json_stream *json);
 
 PDJSON5_SYMEXPORT enum json_type json_skip (json_stream *json);
 PDJSON5_SYMEXPORT enum json_type json_skip_until (json_stream *json, enum json_type type);
