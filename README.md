@@ -9,18 +9,18 @@ significant way: broken string support (what if the string contains
 `\u0000`?), broken/missing Unicode support, or crappy software license
 (GPL or "do no evil"). This library intends to avoid these flaws.
 
-The parser is intended to support *exactly* the JSON standard, no
-more, no less, so that even slightly non-conforming JSON is rejected.
-The input is assumed to be UTF-8, and all strings returned by the
-library are UTF-8 with possible nul characters in the middle, which is
-why the size output parameter is important. Encoded characters
-(`\uxxxx`) are decoded and re-encoded into UTF-8. UTF-16 surrogate
-pairs expressed as adjacent encoded characters are supported.
+The parser is intended to support *exactly* the JSON standard, no more, no
+less, so that even slightly non-conforming JSON is rejected. The input is
+assumed to be UTF-8, and all strings returned by the library are UTF-8 with
+possible `nul` characters in the middle, which is why the size output parameter
+is important. Encoded characters (`\uxxxx`) are decoded and re-encoded into
+UTF-8. UTF-16 surrogate pairs expressed as adjacent encoded characters are
+supported.
 
-One exception to this rule is made to support a "streaming" mode. When
-a JSON "stream" contains multiple JSON objects (optionally separated
-by JSON whitespace), the default behavior of the parser is to allow
-the stream to be "reset," and to continue parsing the stream.
+One exception to this rule is made to support a "streaming" mode. When a JSON
+"stream" contains multiple JSON values (optionally separated by JSON
+whitespace), if the streaming mode is enabled, the parser will allow the
+stream to be "reset" and to continue parsing the subsequent values.
 
 The library is usable and nearly complete, but needs polish.
 
@@ -61,10 +61,11 @@ preserved.
 void json_reset(json_stream *json);
 ```
 
-If strict conformance to the JSON standard is desired, streaming mode
-can be disabled by calling `json_set_streaming` and setting the mode to
-`false`. This will cause any non-whitespace trailing data to trigger a
-parse error.
+By default the parser operates in the strict conformance to the JSON standard
+and any non-whitespace trailing data will trigger a parsing error. If desired,
+the streaming mode can be enabled by calling `json_set_streaming`. This will
+cause the non-whitespace trailing data to be parsed and reported as additional
+JSON values.
 
 ```c
 void json_set_streaming(json_stream *json, bool mode);
