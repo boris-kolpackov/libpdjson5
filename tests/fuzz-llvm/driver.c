@@ -39,11 +39,13 @@ parse (const void *data, size_t size,
       assert (json_get_error (json) != NULL);
       break;
     case JSON_NAME:
+      assert (json_get_name (json, NULL) != NULL);
+      break;
     case JSON_STRING:
-      assert (json_get_string (json, NULL) != NULL);
+      assert (json_get_value (json, NULL) != NULL);
       break;
     case JSON_NUMBER:
-      assert (json_get_string (json, &n) != NULL && n != 0);
+      assert (json_get_value (json, &n) != NULL && n != 0);
       break;
     case JSON_OBJECT:
       assert (json_get_context (json, NULL) == JSON_OBJECT);

@@ -7,7 +7,6 @@
 //
 
 #include <stdio.h>
-#include <errno.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -135,7 +134,9 @@ main (int argc, char *argv[])
     case JSON_NUMBER:
       {
         size_t n;
-        const char* s = json_get_string (&json, &n);
+        const char* s = (t == JSON_NAME
+                         ? json_get_name (&json, &n)
+                         : json_get_value (&json, &n));
         assert (strlen (s) + 1 == n);
 
         // Print numbers and object member names without quoted.

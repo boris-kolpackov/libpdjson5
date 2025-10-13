@@ -23,6 +23,8 @@ extern "C"
 #include <stdio.h>
 #include <stddef.h> // size_t
 
+// Parsing event type.
+//
 enum json_type
 {
   JSON_ERROR = 1,
@@ -77,9 +79,20 @@ PDJSON5_SYMEXPORT enum json_type json_next (json_stream *json);
 PDJSON5_SYMEXPORT enum json_type json_peek (json_stream *json);
 PDJSON5_SYMEXPORT void json_reset (json_stream *json);
 
-// Note that the returned length includes trailing `\0`.
+// Return the object member name after JSON_NAME event.
 //
-PDJSON5_SYMEXPORT const char *json_get_string (json_stream *json, size_t *length);
+// Note that the returned size counts the trailing `\0`.
+//
+PDJSON5_SYMEXPORT const char *
+json_get_name (json_stream *json, size_t *size);
+
+// Return the string or number value after the JSON_STRING or JSON_NUMBER
+// events.
+//
+// Note that the returned size counts the trailing `\0`.
+//
+PDJSON5_SYMEXPORT const char *
+json_get_value (json_stream *json, size_t *size);
 
 PDJSON5_SYMEXPORT enum json_type json_skip (json_stream *json);
 PDJSON5_SYMEXPORT enum json_type json_skip_until (json_stream *json, enum json_type type);

@@ -2127,10 +2127,16 @@ json_skip_until (json_stream *json, enum json_type type)
 }
 
 const char *
-json_get_string (json_stream *json, size_t *length)
+json_get_name (json_stream *json, size_t *size)
 {
-  if (length != NULL)
-    *length = json->data.string_fill;
+  return json_get_value (json, size);
+}
+
+const char *
+json_get_value (json_stream *json, size_t *size)
+{
+  if (size != NULL)
+    *size = json->data.string_fill;
 
   if (json->data.string == NULL)
     return "";
