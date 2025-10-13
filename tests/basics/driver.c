@@ -10,7 +10,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <inttypes.h> // PRIu64
+#include <inttypes.h> // PR*
 
 #include <libpdjson5/version.h>
 #include <libpdjson5/pdjson5.h>
@@ -74,7 +74,7 @@ main (int argc, char *argv[])
 
       if (separator)
       {
-        unsigned long cp;
+        uint32_t cp;
         int r;
         while ((r = json_skip_if_space (&json, json_source_peek (&json), &cp)))
         {
@@ -84,7 +84,7 @@ main (int argc, char *argv[])
             break;
           }
 
-          printf ("%3" PRIu64 ",%3" PRIu64 ": <0x%06lx>\n",
+          printf ("%3" PRIu64 ",%3" PRIu64 ": <0x%06" PRIx32 ">\n",
                   json_get_line (&json),
                   json_get_column (&json),
                   cp);

@@ -103,7 +103,7 @@ EOE
   : This surrogate half must precede another half.
   :
   $* <'"\uD800\u0065"' 2>>EOE !=0
-  <stdin>:1:13: error: surrogate pair continuation \u0065 out of dc00-dfff range
+  <stdin>:1:13: error: surrogate pair continuation \u0065 out of DC00-DFFF range
   EOE
 
   : invalid-surrogate-alone
@@ -111,7 +111,7 @@ EOE
   : This surrogate half cannot be alone.
   :
   $* <'"\uDC00"' 2>>EOE !=0
-  <stdin>:1:7: error: dangling surrogate \udc00
+  <stdin>:1:7: error: dangling surrogate \uDC00
   EOE
 
   : invalid-surrogate-misorder
@@ -119,7 +119,7 @@ EOE
   : Surrogate halves are in the wrong order.
   :
   $* <'":\uDc00\uD800"' 2>>EOE !=0
-  <stdin>:1:8: error: dangling surrogate \udc00
+  <stdin>:1:8: error: dangling surrogate \uDC00
   EOE
 }}
 

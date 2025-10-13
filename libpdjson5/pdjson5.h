@@ -196,7 +196,7 @@ LIBPDJSON5_SYMEXPORT bool json_is_space (json_stream *json, int byte);
 // above get/peek interface operating on bytes, not codepoints.
 //
 LIBPDJSON5_SYMEXPORT int
-json_skip_if_space (json_stream *json, int byte, unsigned long* codepoint);
+json_skip_if_space (json_stream *json, int byte, uint32_t *codepoint);
 
 // Implementation details.
 //
@@ -266,7 +266,7 @@ struct json_stream
   size_t stack_top;
   size_t stack_size;
   enum json_type peek;
-  unsigned int flags;
+  uint32_t flags;
 
   struct
   {
