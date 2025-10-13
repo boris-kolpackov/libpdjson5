@@ -1,8 +1,8 @@
-#ifndef PDJSON5_H
-#define PDJSON5_H
+#ifndef LIBPDJSON5_PDJSON5_H
+#define LIBPDJSON5_PDJSON5_H
 
-#ifndef PDJSON5_SYMEXPORT
-#  define PDJSON5_SYMEXPORT
+#ifndef LIBPDJSON5_SYMEXPORT
+#  define LIBPDJSON5_SYMEXPORT
 #endif
 
 #ifdef __cplusplus
@@ -57,14 +57,14 @@ typedef int (*json_user_io) (void *user);
 typedef struct json_stream json_stream;
 typedef struct json_allocator json_allocator;
 
-PDJSON5_SYMEXPORT void json_open_buffer (json_stream *json, const void *buffer, size_t size);
-PDJSON5_SYMEXPORT void json_open_string (json_stream *json, const char *string);
-PDJSON5_SYMEXPORT void json_open_stream (json_stream *json, FILE *stream);
-PDJSON5_SYMEXPORT void json_open_user (json_stream *json, json_user_io get, json_user_io peek, void *user);
-PDJSON5_SYMEXPORT void json_close (json_stream *json);
+LIBPDJSON5_SYMEXPORT void json_open_buffer (json_stream *json, const void *buffer, size_t size);
+LIBPDJSON5_SYMEXPORT void json_open_string (json_stream *json, const char *string);
+LIBPDJSON5_SYMEXPORT void json_open_stream (json_stream *json, FILE *stream);
+LIBPDJSON5_SYMEXPORT void json_open_user (json_stream *json, json_user_io get, json_user_io peek, void *user);
+LIBPDJSON5_SYMEXPORT void json_close (json_stream *json);
 
-PDJSON5_SYMEXPORT void json_set_allocator (json_stream *json, json_allocator *a);
-PDJSON5_SYMEXPORT void json_set_streaming (json_stream *json, bool mode);
+LIBPDJSON5_SYMEXPORT void json_set_allocator (json_stream *json, json_allocator *a);
+LIBPDJSON5_SYMEXPORT void json_set_streaming (json_stream *json, bool mode);
 
 enum json_language
 {
@@ -73,18 +73,18 @@ enum json_language
   JSON_LANGUAGE_JSON5E, // Extended JSON5.
 };
 
-PDJSON5_SYMEXPORT void
+LIBPDJSON5_SYMEXPORT void
 json_set_language (json_stream *json, enum json_language language);
 
-PDJSON5_SYMEXPORT enum json_type json_next (json_stream *json);
-PDJSON5_SYMEXPORT enum json_type json_peek (json_stream *json);
-PDJSON5_SYMEXPORT void json_reset (json_stream *json);
+LIBPDJSON5_SYMEXPORT enum json_type json_next (json_stream *json);
+LIBPDJSON5_SYMEXPORT enum json_type json_peek (json_stream *json);
+LIBPDJSON5_SYMEXPORT void json_reset (json_stream *json);
 
 // Return the object member name after JSON_NAME event.
 //
 // Note that the returned size counts the trailing `\0`.
 //
-PDJSON5_SYMEXPORT const char *
+LIBPDJSON5_SYMEXPORT const char *
 json_get_name (json_stream *json, size_t *size);
 
 // Return the string or number value after the JSON_STRING or JSON_NUMBER
@@ -92,25 +92,25 @@ json_get_name (json_stream *json, size_t *size);
 //
 // Note that the returned size counts the trailing `\0`.
 //
-PDJSON5_SYMEXPORT const char *
+LIBPDJSON5_SYMEXPORT const char *
 json_get_value (json_stream *json, size_t *size);
 
-PDJSON5_SYMEXPORT enum json_type json_skip (json_stream *json);
-PDJSON5_SYMEXPORT enum json_type json_skip_until (json_stream *json, enum json_type type);
+LIBPDJSON5_SYMEXPORT enum json_type json_skip (json_stream *json);
+LIBPDJSON5_SYMEXPORT enum json_type json_skip_until (json_stream *json, enum json_type type);
 
-PDJSON5_SYMEXPORT size_t json_get_line (json_stream *json);
-PDJSON5_SYMEXPORT size_t json_get_column (json_stream *json);
-PDJSON5_SYMEXPORT size_t json_get_position (json_stream *json);
-PDJSON5_SYMEXPORT size_t json_get_depth (json_stream *json);
-PDJSON5_SYMEXPORT enum json_type json_get_context (json_stream *json, size_t *count);
+LIBPDJSON5_SYMEXPORT size_t json_get_line (json_stream *json);
+LIBPDJSON5_SYMEXPORT size_t json_get_column (json_stream *json);
+LIBPDJSON5_SYMEXPORT size_t json_get_position (json_stream *json);
+LIBPDJSON5_SYMEXPORT size_t json_get_depth (json_stream *json);
+LIBPDJSON5_SYMEXPORT enum json_type json_get_context (json_stream *json, size_t *count);
 
 // Return error message if the previously peeked at or consumed even was
 // JSON_ERROR and NULL otherwise. Note that the message is UTF-8 encoded.
 //
-PDJSON5_SYMEXPORT const char *json_get_error (json_stream *json);
+LIBPDJSON5_SYMEXPORT const char *json_get_error (json_stream *json);
 
-PDJSON5_SYMEXPORT int json_source_get (json_stream *json);
-PDJSON5_SYMEXPORT int json_source_peek (json_stream *json);
+LIBPDJSON5_SYMEXPORT int json_source_get (json_stream *json);
+LIBPDJSON5_SYMEXPORT int json_source_peek (json_stream *json);
 
 // Note that this function only examines the first byte of a potentially
 // multi-byte UTF-8 sequence. As result, it only returns true for whitespaces
@@ -119,7 +119,7 @@ PDJSON5_SYMEXPORT int json_source_peek (json_stream *json);
 // need to do this yourself (and diagnose any non-whitespaces as appropriate)
 // or use json_skip_if_space() below.
 //
-PDJSON5_SYMEXPORT bool json_is_space (json_stream *json, int byte);
+LIBPDJSON5_SYMEXPORT bool json_is_space (json_stream *json, int byte);
 
 // Given a peeked at byte, consume it and any following bytes that are part of
 // the same multi-byte UTF-8 sequence if it is a whitespace and return 1. If
@@ -142,7 +142,7 @@ PDJSON5_SYMEXPORT bool json_is_space (json_stream *json, int byte);
 // values in the streaming mode. Its semantics is rather convoluted due to the
 // above get/peek interface operating on bytes, not codepoints.
 //
-PDJSON5_SYMEXPORT int
+LIBPDJSON5_SYMEXPORT int
 json_skip_if_space (json_stream *json, int byte, unsigned long* codepoint);
 
 // Implementation details.
@@ -242,4 +242,4 @@ struct json_stream
 } /* extern "C" */
 #endif /* __cplusplus */
 
-#endif /* PDJSON5_H */
+#endif /* LIBPDJSON5_PDJSON5_H */
