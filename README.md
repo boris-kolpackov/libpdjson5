@@ -95,7 +95,8 @@ position are always available.)
 
 ```c
 const char *json_get_error(json_stream *json);
-size_t json_get_lineno(json_stream *json);
+size_t json_get_line(json_stream *json);
+size_t json_get_column(json_stream *json);
 size_t json_get_position(json_stream *json);
 ```
 

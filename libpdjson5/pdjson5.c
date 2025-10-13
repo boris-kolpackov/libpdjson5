@@ -1352,7 +1352,7 @@ json_skip_if_space (json_stream *json, int c, unsigned long* cp)
   {
     json->source.get (&json->source); // Consume.
 
-    size_t lineno = json_get_lineno (json);
+    size_t lineno = json_get_line (json);
     size_t colno = json_get_column (json);
 
     if (c == '/')
@@ -1890,7 +1890,7 @@ json_next (json_stream *json)
       bool id;
       if ((id = is_first_id_char (c)) || c == '"' || c == '\'')
       {
-        size_t lineno = json_get_lineno (json);
+        size_t lineno = json_get_line (json);
         size_t colno = json_get_column (json);
 
         json->ntokens++;
@@ -2151,15 +2151,9 @@ json_get_error (json_stream *json)
 }
 
 size_t
-json_get_lineno (json_stream *json)
+json_get_line (json_stream *json)
 {
   return json->start_lineno == 0 ? json->lineno : json->start_lineno;
-}
-
-size_t
-json_get_position (json_stream *json)
-{
-  return json->source.position;
 }
 
 size_t
@@ -2170,6 +2164,12 @@ json_get_column (json_stream *json)
        ? 1
        : json->source.position - json->linepos - json->lineadj)
     : json->start_colno;
+}
+
+size_t
+json_get_position (json_stream *json)
+{
+  return json->source.position;
 }
 
 size_t

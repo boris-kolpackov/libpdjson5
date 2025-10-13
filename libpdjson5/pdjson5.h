@@ -97,9 +97,9 @@ json_get_value (json_stream *json, size_t *size);
 PDJSON5_SYMEXPORT enum json_type json_skip (json_stream *json);
 PDJSON5_SYMEXPORT enum json_type json_skip_until (json_stream *json, enum json_type type);
 
-PDJSON5_SYMEXPORT size_t json_get_lineno (json_stream *json);
-PDJSON5_SYMEXPORT size_t json_get_position (json_stream *json);
+PDJSON5_SYMEXPORT size_t json_get_line (json_stream *json);
 PDJSON5_SYMEXPORT size_t json_get_column (json_stream *json);
+PDJSON5_SYMEXPORT size_t json_get_position (json_stream *json);
 PDJSON5_SYMEXPORT size_t json_get_depth (json_stream *json);
 PDJSON5_SYMEXPORT enum json_type json_get_context (json_stream *json, size_t *count);
 
