@@ -21,6 +21,7 @@ extern "C"
 #endif /* __cplusplus */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stddef.h> // size_t
 
 // Parsing event type.
@@ -52,19 +53,34 @@ struct json_allocator
   void (*free) (void *);
 };
 
-typedef int (*json_user_io) (void *user);
+typedef int (*json_user_io) (void *user_data);
 
 typedef struct json_stream json_stream;
 typedef struct json_allocator json_allocator;
 
-LIBPDJSON5_SYMEXPORT void json_open_buffer (json_stream *json, const void *buffer, size_t size);
-LIBPDJSON5_SYMEXPORT void json_open_string (json_stream *json, const char *string);
-LIBPDJSON5_SYMEXPORT void json_open_stream (json_stream *json, FILE *stream);
-LIBPDJSON5_SYMEXPORT void json_open_user (json_stream *json, json_user_io get, json_user_io peek, void *user);
-LIBPDJSON5_SYMEXPORT void json_close (json_stream *json);
+LIBPDJSON5_SYMEXPORT void
+json_open_buffer (json_stream *json, const void *buffer, size_t size);
 
-LIBPDJSON5_SYMEXPORT void json_set_allocator (json_stream *json, json_allocator *a);
-LIBPDJSON5_SYMEXPORT void json_set_streaming (json_stream *json, bool mode);
+LIBPDJSON5_SYMEXPORT void
+json_open_string (json_stream *json, const char *string);
+
+LIBPDJSON5_SYMEXPORT void
+json_open_stream (json_stream *json, FILE *stream);
+
+LIBPDJSON5_SYMEXPORT void
+json_open_user (json_stream *json,
+                json_user_io get,
+                json_user_io peek,
+                void *user_data);
+
+LIBPDJSON5_SYMEXPORT void
+json_close (json_stream *json);
+
+LIBPDJSON5_SYMEXPORT void
+json_set_allocator (json_stream *json, json_allocator *a);
+
+LIBPDJSON5_SYMEXPORT void
+json_set_streaming (json_stream *json, bool mode);
 
 enum json_language
 {
@@ -76,9 +92,19 @@ enum json_language
 LIBPDJSON5_SYMEXPORT void
 json_set_language (json_stream *json, enum json_language language);
 
-LIBPDJSON5_SYMEXPORT enum json_type json_next (json_stream *json);
-LIBPDJSON5_SYMEXPORT enum json_type json_peek (json_stream *json);
-LIBPDJSON5_SYMEXPORT void json_reset (json_stream *json);
+LIBPDJSON5_SYMEXPORT enum json_type
+json_next (json_stream *json);
+
+// Note that after peeking at the next even, all the accessor functions
+// (json_get_name/value(), json_get_line/column(), json_get_error(), etc),
+// return information about the newly peeked event, not the previously
+// consumed one.
+//
+LIBPDJSON5_SYMEXPORT enum json_type
+json_peek (json_stream *json);
+
+LIBPDJSON5_SYMEXPORT void
+json_reset (json_stream *json);
 
 // Return the object member name after JSON_NAME event.
 //
@@ -95,14 +121,41 @@ json_get_name (json_stream *json, size_t *size);
 LIBPDJSON5_SYMEXPORT const char *
 json_get_value (json_stream *json, size_t *size);
 
-LIBPDJSON5_SYMEXPORT enum json_type json_skip (json_stream *json);
-LIBPDJSON5_SYMEXPORT enum json_type json_skip_until (json_stream *json, enum json_type type);
+// Skip over the next value, skipping over entire arrays and objects. Return
+// the skipped value.
+//
+LIBPDJSON5_SYMEXPORT enum json_type
+json_skip (json_stream *json);
 
-LIBPDJSON5_SYMEXPORT size_t json_get_line (json_stream *json);
-LIBPDJSON5_SYMEXPORT size_t json_get_column (json_stream *json);
-LIBPDJSON5_SYMEXPORT size_t json_get_position (json_stream *json);
-LIBPDJSON5_SYMEXPORT size_t json_get_depth (json_stream *json);
-LIBPDJSON5_SYMEXPORT enum json_type json_get_context (json_stream *json, size_t *count);
+// Skip until the specified event type or encountering JSON_ERROR or
+// JSON_DONE. Return the encountered event.
+//
+LIBPDJSON5_SYMEXPORT enum json_type
+json_skip_until (json_stream *json, enum json_type type);
+
+LIBPDJSON5_SYMEXPORT uint64_t
+json_get_line (json_stream *json);
+
+LIBPDJSON5_SYMEXPORT uint64_t
+json_get_column (json_stream *json);
+
+LIBPDJSON5_SYMEXPORT uint64_t
+json_get_position (json_stream *json);
+
+LIBPDJSON5_SYMEXPORT size_t
+json_get_depth (json_stream *json);
+
+// Return the current parsing context, that is, JSON_OBJECT if we are inside
+// an object, JSON_ARRAY if we are inside an array, and JSON_DONE if we are
+// not yet/no longer in either.
+//
+// Additionally, for the first two cases, also return the number of parsing
+// events that have already been observed at this level with json_next/peek().
+// In particular, inside an object, an odd number would indicate that we just
+// observed the JSON_NAME event.
+//
+LIBPDJSON5_SYMEXPORT enum json_type
+json_get_context (json_stream *json, uint64_t *count);
 
 // Return error message if the previously peeked at or consumed even was
 // JSON_ERROR and NULL otherwise. Note that the message is UTF-8 encoded.
@@ -152,7 +205,7 @@ struct json_source
 {
   int (*get) (struct json_source *);
   int (*peek) (struct json_source *);
-  size_t position;
+  uint64_t position;
   union
   {
     struct
@@ -175,7 +228,7 @@ struct json_source
 
 struct json_stream
 {
-  size_t lineno; // @@ uint64_t (and the rest)
+  uint64_t lineno;
 
   /* While counting lines is straightforward, columns are tricky because we
    * have to count codepoints, not bytes. We could have peppered the code with
@@ -201,13 +254,13 @@ struct json_stream
    * column). So to handle this we will cache the start column (colno) for
    * such events.
    */
-  size_t linepos; /* Position at the beginning of the current line. */
-  size_t lineadj; /* Adjustment for multi-byte UTF-8 sequences. */
-  size_t linecon; /* Number of remaining UTF-8 continuation bytes. */
+  uint64_t linepos; /* Position at the beginning of the current line. */
+  size_t   lineadj; /* Adjustment for multi-byte UTF-8 sequences. */
+  size_t   linecon; /* Number of remaining UTF-8 continuation bytes. */
 
   /* Start line/column for value events or 0. */
-  size_t start_lineno;
-  size_t start_colno;
+  uint64_t start_lineno;
+  uint64_t start_colno;
 
   struct json_stack *stack;
   size_t stack_top;
@@ -218,8 +271,8 @@ struct json_stream
   struct
   {
     enum json_type type;
-    size_t lineno;
-    size_t colno;
+    uint64_t lineno;
+    uint64_t colno;
   } pending;
 
   struct
@@ -229,7 +282,7 @@ struct json_stream
     size_t string_size;
   } data;
 
-  size_t ntokens; // Number of values/names read, recursively.
+  uint64_t ntokens; // Number of values/names read, recursively.
 
   struct json_source source;
   struct json_allocator alloc;

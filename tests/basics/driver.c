@@ -8,7 +8,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 #include <stdbool.h>
+#include <inttypes.h> // PRIu64
 
 #include <libpdjson5/version.h>
 #include <libpdjson5/pdjson5.h>
@@ -82,7 +84,7 @@ main (int argc, char *argv[])
             break;
           }
 
-          printf ("%3zu,%3zu: <0x%06lx>\n",
+          printf ("%3" PRIu64 ",%3" PRIu64 ": <0x%06lx>\n",
                   json_get_line (&json),
                   json_get_column (&json),
                   cp);
@@ -100,7 +102,7 @@ main (int argc, char *argv[])
     if (first)
       first = false;
 
-    printf ("%3zu,%3zu: ",
+    printf ("%3" PRIu64 ",%3" PRIu64 ": ",
             json_get_line (&json),
             json_get_column (&json));
 
@@ -126,7 +128,7 @@ main (int argc, char *argv[])
       break;
     case JSON_NAME:
       {
-        size_t n;
+        uint64_t n;
         assert (json_get_context (&json, &n) == JSON_OBJECT && n % 2 != 0);
       }
       // Fall through.
@@ -168,7 +170,7 @@ main (int argc, char *argv[])
   if (t == JSON_ERROR)
   {
     fprintf (stderr,
-             "<stdin>:%zu:%zu: error: %s\n",
+             "<stdin>:%" PRIu64 ":%" PRIu64 ": error: %s\n",
              json_get_line (&json),
              json_get_column (&json),
              json_get_error (&json));

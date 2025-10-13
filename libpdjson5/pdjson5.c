@@ -266,7 +266,7 @@ diag_codepoint (json_stream *json, unsigned long c)
 struct json_stack
 {
   enum json_type type;
-  long count;
+  uint64_t count;
 };
 
 static enum json_type
@@ -449,7 +449,7 @@ static enum json_type
 is_match_string (json_stream *json,
                  const char *pattern,
                  unsigned long nextcp, // First codepoint after the string.
-                 size_t* colno,        // Adjusted in case of an error.
+                 uint64_t* colno,      // Adjusted in case of an error.
                  enum json_type type)
 {
   const char *string = json->data.string + 1;
@@ -1352,8 +1352,8 @@ json_skip_if_space (json_stream *json, int c, unsigned long* cp)
   {
     json->source.get (&json->source); // Consume.
 
-    size_t lineno = json_get_line (json);
-    size_t colno = json_get_column (json);
+    uint64_t lineno = json_get_line (json);
+    uint64_t colno = json_get_column (json);
 
     if (c == '/')
     {
@@ -1459,7 +1459,7 @@ next (json_stream *json)
 static enum json_type
 read_value (json_stream *json, int c)
 {
-  size_t colno = json_get_column (json);
+  uint64_t colno = json_get_column (json);
 
   json->ntokens++;
 
@@ -1596,7 +1596,7 @@ read_identifier (json_stream *json, int c)
 static enum json_type
 read_name (json_stream *json, int c)
 {
-  size_t colno = json_get_column (json);
+  uint64_t colno = json_get_column (json);
 
   json->ntokens++;
 
@@ -1890,8 +1890,8 @@ json_next (json_stream *json)
       bool id;
       if ((id = is_first_id_char (c)) || c == '"' || c == '\'')
       {
-        size_t lineno = json_get_line (json);
-        size_t colno = json_get_column (json);
+        uint64_t lineno = json_get_line (json);
+        uint64_t colno = json_get_column (json);
 
         json->ntokens++;
 
@@ -2085,8 +2085,8 @@ enum json_type
 json_skip (json_stream *json)
 {
   enum json_type type = json_next (json);
-  size_t cnt_arr = 0;
-  size_t cnt_obj = 0;
+  uint64_t cnt_arr = 0;
+  uint64_t cnt_obj = 0;
 
   for (enum json_type skip = type; ; skip = json_next (json))
   {
@@ -2150,13 +2150,13 @@ json_get_error (json_stream *json)
   return json->flags & FLAG_ERROR ? json->error_message : NULL;
 }
 
-size_t
+uint64_t
 json_get_line (json_stream *json)
 {
   return json->start_lineno == 0 ? json->lineno : json->start_lineno;
 }
 
-size_t
+uint64_t
 json_get_column (json_stream *json)
 {
   return json->start_colno == 0
@@ -2166,7 +2166,7 @@ json_get_column (json_stream *json)
     : json->start_colno;
 }
 
-size_t
+uint64_t
 json_get_position (json_stream *json)
 {
   return json->source.position;
@@ -2178,17 +2178,8 @@ json_get_depth (json_stream *json)
   return json->stack_top + 1;
 }
 
-/* Return the current parsing context, that is, JSON_OBJECT if we are inside
-   an object, JSON_ARRAY if we are inside an array, and JSON_DONE if we are
-   not yet/no longer in either.
-
-   Additionally, for the first two cases, also return the number of parsing
-   events that have already been observed at this level with json_next/peek().
-   In particular, inside an object, an odd number would indicate that we just
-   observed the JSON_NAME event.
-*/
 enum json_type
-json_get_context (json_stream *json, size_t *count)
+json_get_context (json_stream *json, uint64_t *count)
 {
   if (json->stack_top == (size_t)-1)
     return JSON_DONE;
