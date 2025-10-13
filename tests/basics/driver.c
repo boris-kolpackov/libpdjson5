@@ -21,7 +21,7 @@ main (int argc, char *argv[])
 {
   bool streaming = false;
   bool separator = false;
-  enum json_language language = json_language_json;
+  enum json_language language = JSON_LANGUAGE_JSON;
 
   for (int i = 1; i < argc; ++i)
   {
@@ -32,9 +32,9 @@ main (int argc, char *argv[])
     else if (strcmp (a, "--separator") == 0)
       separator = true;
     else if (strcmp (a, "--json5") == 0)
-      language = json_language_json5;
+      language = JSON_LANGUAGE_JSON5;
     else if (strcmp (a, "--json5e") == 0)
-      language = json_language_json5e;
+      language = JSON_LANGUAGE_JSON5E;
     else
     {
       fprintf (stderr, "error: unexpected argument '%s'\n", a);
