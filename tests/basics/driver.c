@@ -83,7 +83,7 @@ main (int argc, char *argv[])
           }
 
           printf ("%3zu,%3zu: <0x%06lx>\n",
-                  json_get_lineno (&json),
+                  json_get_line (&json),
                   json_get_column (&json),
                   cp);
         }
@@ -101,7 +101,7 @@ main (int argc, char *argv[])
       first = false;
 
     printf ("%3zu,%3zu: ",
-            json_get_lineno (&json),
+            json_get_line (&json),
             json_get_column (&json));
 
     if (t == JSON_ARRAY_END || t == JSON_OBJECT_END)
@@ -169,7 +169,7 @@ main (int argc, char *argv[])
   {
     fprintf (stderr,
              "<stdin>:%zu:%zu: error: %s\n",
-             json_get_lineno (&json),
+             json_get_line (&json),
              json_get_column (&json),
              json_get_error (&json));
     r = 1;
