@@ -38,6 +38,7 @@ parse (const void *data, size_t size,
     case JSON_ERROR:
       assert (json_get_error (json) != NULL);
       break;
+    case JSON_NAME:
     case JSON_STRING:
       assert (json_get_string (json, NULL) != NULL);
       break;

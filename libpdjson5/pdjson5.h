@@ -31,6 +31,7 @@ enum json_type
   JSON_OBJECT_END,
   JSON_ARRAY,
   JSON_ARRAY_END,
+  JSON_NAME,       // Object member name.
   JSON_STRING,
   JSON_NUMBER,
   JSON_TRUE,

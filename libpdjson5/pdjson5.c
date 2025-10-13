@@ -1590,7 +1590,7 @@ read_identifier (json_stream *json, int c)
   if (pushchar (json, '\0') != 0)
     return JSON_ERROR;
 
-  return JSON_STRING;
+  return JSON_NAME;
 }
 
 static enum json_type
@@ -1620,7 +1620,7 @@ read_name (json_stream *json, int c)
 
   json->start_colno = colno;
 
-  return JSON_STRING;
+  return JSON_NAME;
 }
 
 enum json_type
@@ -1973,7 +1973,7 @@ json_next (json_stream *json)
 
         if (c == ':')
         {
-          json->pending.type = JSON_STRING;
+          json->pending.type = JSON_NAME;
           json->pending.lineno = lineno;
           json->pending.colno = colno;
 
@@ -2178,8 +2178,8 @@ json_get_depth (json_stream *json)
 
    Additionally, for the first two cases, also return the number of parsing
    events that have already been observed at this level with json_next/peek().
-   In particular, inside an object, an odd number would indicate that the just
-   observed JSON_STRING event is a member name. @@ Add explicit JSON_MEMBER?
+   In particular, inside an object, an odd number would indicate that we just
+   observed the JSON_NAME event.
 */
 enum json_type
 json_get_context (json_stream *json, size_t *count)
