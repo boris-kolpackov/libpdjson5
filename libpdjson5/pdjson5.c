@@ -363,7 +363,7 @@ init (json_stream *json)
   json->linecon = 0;
   json->start_lineno = 0;
   json->start_colno = 0;
-  json->flags = FLAG_STREAMING;
+  json->flags = 0;
   json->error_message[0] = '\0';
   json->ntokens = 0;
   json->peek = (enum json_type)0;
