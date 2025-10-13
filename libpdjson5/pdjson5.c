@@ -74,7 +74,7 @@ utf8_seq_length (char byte)
 }
 
 static int
-is_legal_utf8 (const unsigned char *bytes, int length)
+is_legal_utf8 (const unsigned char *bytes, size_t length)
 {
   if (0 == bytes || 0 == length)
     return 0;
