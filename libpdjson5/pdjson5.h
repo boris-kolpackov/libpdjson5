@@ -68,12 +68,13 @@ PDJSON5_SYMEXPORT void json_set_streaming (json_stream *json, bool mode);
 
 enum json_language
 {
-  json_language_json,   // Strict JSON.
-  json_language_json5,  // Strict JSON5
-  json_language_json5e, // Extended JSON5.
+  JSON_LANGUAGE_JSON,   // Strict JSON.
+  JSON_LANGUAGE_JSON5,  // Strict JSON5
+  JSON_LANGUAGE_JSON5E, // Extended JSON5.
 };
-PDJSON5_SYMEXPORT void json_set_language (json_stream *json,
-                                          enum json_language language);
+
+PDJSON5_SYMEXPORT void
+json_set_language (json_stream *json, enum json_language language);
 
 PDJSON5_SYMEXPORT enum json_type json_next (json_stream *json);
 PDJSON5_SYMEXPORT enum json_type json_peek (json_stream *json);

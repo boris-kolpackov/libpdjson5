@@ -79,12 +79,12 @@ LLVMFuzzerTestOneInput (const uint8_t* data, size_t size)
   // different modes may apply different parsing logic to the same input
   // (implied object handling in JSON5E is a good example).
   //
-  parse (data, size, json_language_json,   false);
-  parse (data, size, json_language_json,   true);
-  parse (data, size, json_language_json5,  false);
-  parse (data, size, json_language_json5,  true);
-  parse (data, size, json_language_json5e, false);
-  parse (data, size, json_language_json5e, true);
+  parse (data, size, JSON_LANGUAGE_JSON,   false);
+  parse (data, size, JSON_LANGUAGE_JSON,   true);
+  parse (data, size, JSON_LANGUAGE_JSON5,  false);
+  parse (data, size, JSON_LANGUAGE_JSON5,  true);
+  parse (data, size, JSON_LANGUAGE_JSON5E, false);
+  parse (data, size, JSON_LANGUAGE_JSON5E, true);
 
   return 0;
 }

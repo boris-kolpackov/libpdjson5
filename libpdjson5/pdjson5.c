@@ -2306,14 +2306,14 @@ json_set_language (json_stream *json, enum json_language language)
 {
   switch (language)
   {
-  case json_language_json:
+  case JSON_LANGUAGE_JSON:
     json->flags &= ~(FLAG_JSON5 | FLAG_JSON5E);
     break;
-  case json_language_json5:
+  case JSON_LANGUAGE_JSON5:
     json->flags &= ~FLAG_JSON5E;
     json->flags |= FLAG_JSON5;
     break;
-  case json_language_json5e:
+  case JSON_LANGUAGE_JSON5E:
     json->flags |= FLAG_JSON5 | FLAG_JSON5E;
     break;
   }
