@@ -5,6 +5,9 @@ using c
 h{*}: extension = h
 c{*}: extension = c
 
+if ($c.target.system == 'win32-msvc')
+  c.poptions += -D_CRT_SECURE_NO_WARNINGS
+
 # Every exe{} in this subproject is by default a test.
 #
 exe{*}: test = true
