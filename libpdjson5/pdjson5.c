@@ -31,27 +31,27 @@
               format,                                             \
               __VA_ARGS__);                                       \
     json->flags |= FLAG_ERROR;                                    \
-    json->subtype = JSON_ERROR_SYNTAX;                            \
+    json->subtype = PDJSON_ERROR_SYNTAX;                          \
   }
 
-#define json_io_error(json, message)                              \
+#define io_error(json, message)                                   \
   if (!(json->flags & FLAG_ERROR))                                \
   {                                                               \
     size_t n = sizeof (json->error_message) - 1;                  \
     strncpy (json->error_message, message, n);                    \
     json->error_message[n] = '\0';                                \
     json->flags |= FLAG_ERROR;                                    \
-    json->subtype = JSON_ERROR_IO;                                \
+    json->subtype = PDJSON_ERROR_IO;                              \
   }
 
-#define json_mem_error(json, message)                             \
+#define mem_error(json, message)                                  \
   if (!(json->flags & FLAG_ERROR))                                \
   {                                                               \
     size_t n = sizeof (json->error_message) - 1;                  \
     strncpy (json->error_message, message, n);                    \
     json->error_message[n] = '\0';                                \
     json->flags |= FLAG_ERROR;                                    \
-    json->subtype = JSON_ERROR_MEMORY;                            \
+    json->subtype = PDJSON_ERROR_MEMORY;                          \
   }
 
 static size_t
@@ -143,8 +143,8 @@ is_legal_utf8 (const unsigned char *bytes, size_t length)
 }
 
 
-// See documentation for struct json_user_io on reasonable assumptions around
-// the io failure semantics.
+// See documentation for struct pdjson_user_io on reasonable assumptions
+// around the io failure semantics.
 //
 // Checking for the io error after every call to peek()/get() is quite tedious
 // and slow while io errors being fairly unlikely. As a result, we often use
@@ -155,31 +155,31 @@ is_legal_utf8 (const unsigned char *bytes, size_t length)
 // if (c == EOF) // IOERROR
 // {
 //   json_error (...);
-//   return JSON_ERROR;
+//   return PDJSON_ERROR;
 // }
 //
-// The idea here is to piggy-back on the normal EOF handling (which in
-// many contexts results in an error). The trick here is that json_error()
-// is not going to override the error message if there is already a pending
-// (io) error.
+// The idea here is to piggy-back on the normal EOF handling (which in many
+// contexts results in an error). The trick here is that json_error() is not
+// going to override the error message if there is already a pending (io)
+// error.
 //
 // Because of this implicit io error handing we annotate each call with the
 // IOERROR comment to highlight where/how the io error is handled.
 //
 static int
-source_peek (json_stream *json)
+source_peek (pdjson_stream *json)
 {
-  struct json_source *source = &json->source;
+  struct pdjson_source *source = &json->source;
 
   switch (source->tag)
   {
-  case JSON_SOURCE_BUFFER:
+  case PDJSON_SOURCE_BUFFER:
     {
       return source->position != source->source.buffer.length
         ? source->source.buffer.buffer[source->position]
         : EOF;
     }
-  case JSON_SOURCE_USER:
+  case PDJSON_SOURCE_USER:
     {
       int c = source->source.user.io.peek (source->source.user.data);
 
@@ -190,7 +190,7 @@ source_peek (json_stream *json)
 
       return c;
     }
-  case JSON_SOURCE_STREAM:
+  case PDJSON_SOURCE_STREAM:
     {
       FILE *stream = source->source.stream.stream;
 
@@ -205,24 +205,24 @@ source_peek (json_stream *json)
     }
   }
 
-  json_io_error (json, "unable to read input text");
+  io_error (json, "unable to read input text");
   return EOF;
 }
 
 static int
-source_get (json_stream *json)
+source_get (pdjson_stream *json)
 {
-  struct json_source *source = &json->source;
+  struct pdjson_source *source = &json->source;
 
   switch (source->tag)
   {
-  case JSON_SOURCE_BUFFER:
+  case PDJSON_SOURCE_BUFFER:
     {
       return source->position != source->source.buffer.length
         ? source->source.buffer.buffer[source->position++]
         : EOF;
     }
-  case JSON_SOURCE_USER:
+  case PDJSON_SOURCE_USER:
     {
       int c = source->source.user.io.get (source->source.user.data);
 
@@ -234,7 +234,7 @@ source_get (json_stream *json)
 
       return c;
     }
-  case JSON_SOURCE_STREAM:
+  case PDJSON_SOURCE_STREAM:
     {
       FILE *stream = source->source.stream.stream;
 
@@ -249,7 +249,7 @@ source_get (json_stream *json)
     }
   }
 
-  json_io_error (json, "unable to read input text");
+  io_error (json, "unable to read input text");
   return EOF;
 }
 
@@ -266,7 +266,7 @@ source_get (json_stream *json)
 // Note that this function may set FLAG_ERROR in case of an io error.
 //
 static const char *
-diag_char (json_stream *json, int c)
+diag_char (pdjson_stream *json, int c)
 {
   if (c == EOF)
     return "end of text";
@@ -324,7 +324,7 @@ diag_char (json_stream *json, int c)
 // UTF-8 and that the string doesn't end before the sequence.
 //
 static const char *
-diag_char_string (json_stream *json, const char* u)
+diag_char_string (pdjson_stream *json, const char* u)
 {
   char c = *u;
 
@@ -350,7 +350,7 @@ diag_char_string (json_stream *json, const char* u)
 // As above but for the decoded codepoint.
 //
 static const char *
-diag_codepoint (json_stream *json, uint32_t c)
+diag_codepoint (pdjson_stream *json, uint32_t c)
 {
   if (c == (uint32_t)-1 /*EOF*/)
     return diag_char (json, EOF);
@@ -398,14 +398,14 @@ diag_codepoint (json_stream *json, uint32_t c)
 #  define LIBPDJSON5_STACK_INC 4
 #endif
 
-struct json_stack
+struct pdjson_stack
 {
-  enum json_type type;
+  enum pdjson_type type;
   uint64_t count;
 };
 
-static enum json_type
-push (json_stream *json, enum json_type type)
+static enum pdjson_type
+push (pdjson_stream *json, enum pdjson_type type)
 {
   size_t new_stack_top = json->stack_top + 1;
 
@@ -413,19 +413,19 @@ push (json_stream *json, enum json_type type)
   if (new_stack_top > LIBPDJSON5_STACK_MAX)
   {
     json_error (json, "%s", "maximum depth of nesting reached");
-    return JSON_ERROR;
+    return PDJSON_ERROR;
   }
 #endif
 
   if (new_stack_top >= json->stack_size)
   {
     size_t size = (json->stack_size + LIBPDJSON5_STACK_INC) * sizeof (*json->stack);
-    struct json_stack *stack =
-      (struct json_stack *)json->alloc.realloc (json->stack, size); // THROW
+    struct pdjson_stack *stack =
+      (struct pdjson_stack *)json->alloc.realloc (json->stack, size); // THROW
     if (stack == NULL)
     {
-      json_mem_error (json, "out of memory");
-      return JSON_ERROR;
+      mem_error (json, "out of memory");
+      return PDJSON_ERROR;
     }
 
     json->stack_size += LIBPDJSON5_STACK_INC;
@@ -440,14 +440,14 @@ push (json_stream *json, enum json_type type)
   return type;
 }
 
-static enum json_type
-pop (json_stream *json, enum json_type type)
+static enum pdjson_type
+pop (pdjson_stream *json, enum pdjson_type type)
 {
 #if 0
   assert (json->stack != NULL &&
-          json->stack[json->stack_top].type == (type == JSON_OBJECT_END
-                                                ? JSON_OBJECT
-                                                : JSON_ARRAY));
+          json->stack[json->stack_top].type == (type == PDJSON_OBJECT_END
+                                                ? PDJSON_OBJECT
+                                                : PDJSON_ARRAY));
 #endif
 
   json->stack_top--;
@@ -455,7 +455,7 @@ pop (json_stream *json, enum json_type type)
 }
 
 static void
-init (json_stream *json)
+init (pdjson_stream *json)
 {
   json->lineno = 1;
   json->linepos = 0;
@@ -467,9 +467,9 @@ init (json_stream *json)
   json->error_message[0] = '\0';
   json->ntokens = 0;
   json->subtype = 0;
-  json->peek = (enum json_type)0;
+  json->peek = (enum pdjson_type)0;
 
-  json->pending.type = (enum json_type)0;
+  json->pending.type = (enum pdjson_type)0;
 
   json->stack = NULL;
   json->stack_top = (size_t)-1;
@@ -486,7 +486,7 @@ init (json_stream *json)
 }
 
 static bool
-pushchar (json_stream *json, int c)
+pushchar (pdjson_stream *json, int c)
 {
   if (json->data.string_fill == json->data.string_size)
   {
@@ -494,7 +494,7 @@ pushchar (json_stream *json, int c)
     char *buffer = (char *)json->alloc.realloc (json->data.string, size); // THROW
     if (buffer == NULL)
     {
-      json_mem_error (json, "out of memory");
+      mem_error (json, "out of memory");
       return false;
     }
 
@@ -510,11 +510,11 @@ pushchar (json_stream *json, int c)
 // Match the remainder of input assuming the first character in pattern
 // matched. If copy is true, also copy the remainder to the string buffer.
 //
-static enum json_type
-is_match (json_stream *json,
+static enum pdjson_type
+is_match (pdjson_stream *json,
           const char *pattern,
           bool copy,
-          enum json_type type)
+          enum pdjson_type type)
 {
   int c;
   for (const char *p = pattern + 1; *p; p++)
@@ -524,20 +524,20 @@ is_match (json_stream *json,
       json_error (json,
                   "expected '%c' instead of %s in '%s'",
                   *p, diag_char (json, c), pattern);
-      return JSON_ERROR;
+      return PDJSON_ERROR;
     }
 
     if (copy)
     {
       if (!pushchar (json, c))
-        return JSON_ERROR;
+        return PDJSON_ERROR;
     }
   }
 
   if (copy)
   {
     if (!pushchar (json, '\0'))
-      return JSON_ERROR;
+      return PDJSON_ERROR;
   }
 
   return type;
@@ -546,12 +546,12 @@ is_match (json_stream *json,
 // Match the remainder of the string buffer assuming the first character in
 // the pattern matched.
 //
-static enum json_type
-is_match_string (json_stream *json,
+static enum pdjson_type
+is_match_string (pdjson_stream *json,
                  const char *pattern,
                  uint32_t nextcp,      // First codepoint after the string.
                  uint64_t* colno,      // Adjusted in case of an error.
-                 enum json_type type)
+                 enum pdjson_type type)
 {
   const char *string = json->data.string + 1;
 
@@ -578,7 +578,7 @@ is_match_string (json_stream *json,
       if (c != '\0' || nextcp != (uint32_t)-1)
         *colno += 1; // Plus 1 for the first character but minus 1 for EOF.
 
-      return JSON_ERROR;
+      return PDJSON_ERROR;
     }
   }
 
@@ -588,27 +588,27 @@ is_match_string (json_stream *json,
                 "expected end of text instead of %s",
                 diag_char_string (json, string + i));
     *colno += i + 1;
-    return JSON_ERROR;
+    return PDJSON_ERROR;
   }
 
   return type;
 }
 
 static bool
-init_string (json_stream *json)
+init_string (pdjson_stream *json)
 {
   json->data.string_size = 256; // @@ Make configurable?
   json->data.string = (char *)json->alloc.malloc (json->data.string_size); // THROW
   if (json->data.string == NULL)
   {
-    json_mem_error (json, "out of memory");
+    mem_error (json, "out of memory");
     return false;
   }
   return true;
 }
 
 static bool
-encode_utf8 (json_stream *json, uint32_t c)
+encode_utf8 (pdjson_stream *json, uint32_t c)
 {
   if (c < 0x80)
   {
@@ -682,7 +682,7 @@ hexchar (int c)
 // Read 4-digit hex number in \uHHHH. Return (uint32_t)-1 if invalid.
 //
 static uint32_t
-read_unicode_cp (json_stream *json)
+read_unicode_cp (pdjson_stream *json)
 {
   uint32_t cp = 0;
   unsigned int shift = 12;
@@ -713,7 +713,7 @@ read_unicode_cp (json_stream *json)
 }
 
 static bool
-read_unicode (json_stream *json)
+read_unicode (pdjson_stream *json)
 {
   uint32_t cp, h, l;
 
@@ -781,7 +781,7 @@ read_unicode (json_stream *json)
 // Read 4-digit hex number in \xHH. Return (uint32_t)-1 if invalid.
 //
 static uint32_t
-read_latin_cp (json_stream *json)
+read_latin_cp (pdjson_stream *json)
 {
   uint32_t cp = 0;
   unsigned int shift = 4;
@@ -812,7 +812,7 @@ read_latin_cp (json_stream *json)
 }
 
 static bool
-read_latin (json_stream *json)
+read_latin (pdjson_stream *json)
 {
   uint32_t cp;
 
@@ -823,7 +823,7 @@ read_latin (json_stream *json)
 }
 
 static bool
-read_escaped (json_stream *json)
+read_escaped (pdjson_stream *json)
 {
   int c = source_get (json);
   if (c == EOF) // IOERROR
@@ -933,7 +933,7 @@ read_escaped (json_stream *json)
 }
 
 static bool
-read_utf8 (json_stream* json, int c)
+read_utf8 (pdjson_stream* json, int c)
 {
   size_t n = utf8_seq_length (c);
   if (!n)
@@ -969,11 +969,11 @@ read_utf8 (json_stream* json, int c)
   return true;
 }
 
-static enum json_type
-read_string (json_stream *json, int quote)
+static enum pdjson_type
+read_string (pdjson_stream *json, int quote)
 {
   if (json->data.string == NULL && !init_string (json))
-    return JSON_ERROR;
+    return PDJSON_ERROR;
 
   json->data.string_fill = 0;
 
@@ -983,21 +983,21 @@ read_string (json_stream *json, int quote)
     if (c == EOF) // IOERROR
     {
       json_error (json, "%s", "unterminated string literal");
-      return JSON_ERROR;
+      return PDJSON_ERROR;
     }
     else if (c == quote)
     {
-      return pushchar (json, '\0') ? JSON_STRING : JSON_ERROR;
+      return pushchar (json, '\0') ? PDJSON_STRING : PDJSON_ERROR;
     }
     else if (c == '\\')
     {
       if (!read_escaped (json))
-        return JSON_ERROR;
+        return PDJSON_ERROR;
     }
     else if ((unsigned int) c >= 0x80)
     {
       if (!read_utf8 (json, c))
-        return JSON_ERROR;
+        return PDJSON_ERROR;
     }
     else
     {
@@ -1019,15 +1019,15 @@ read_string (json_stream *json, int quote)
           : (c >= 0 && c < 0x20))
       {
         json_error (json, "%s", "unescaped control character in string");
-        return JSON_ERROR;
+        return PDJSON_ERROR;
       }
 
       if (!pushchar (json, c))
-        return JSON_ERROR;
+        return PDJSON_ERROR;
     }
   }
 
-  return JSON_ERROR;
+  return PDJSON_ERROR;
 }
 
 static bool
@@ -1037,7 +1037,7 @@ is_dec_digit (int c)
 }
 
 static bool
-read_dec_digits (json_stream *json)
+read_dec_digits (pdjson_stream *json)
 {
   int c;
   size_t nread = 0;
@@ -1070,7 +1070,7 @@ is_hex_digit (int c)
 }
 
 static bool
-read_hex_digits (json_stream *json)
+read_hex_digits (pdjson_stream *json)
 {
   int c;
   size_t nread = 0;
@@ -1094,16 +1094,16 @@ read_hex_digits (json_stream *json)
 
 // Given a consumed byte that starts a number, read the rest of it.
 //
-static enum json_type
-read_number (json_stream *json, int c)
+static enum pdjson_type
+read_number (pdjson_stream *json, int c)
 {
   if (json->data.string == NULL && !init_string (json))
-    return JSON_ERROR;
+    return PDJSON_ERROR;
 
   json->data.string_fill = 0;
 
   if (!pushchar (json, c))
-    return JSON_ERROR;
+    return PDJSON_ERROR;
 
   // Note: we can only have '+' here if we are in the JSON5 mode.
   //
@@ -1114,14 +1114,14 @@ read_number (json_stream *json, int c)
         ((json->flags & FLAG_JSON5) && (c == 'I' || c == 'N' || c == '.')))
     {
       if (!pushchar (json, c))
-        return JSON_ERROR;
+        return PDJSON_ERROR;
 
       // Fall through.
     }
     else // IOERROR
     {
       json_error (json, "unexpected %s in number", diag_char (json, c));
-      return JSON_ERROR;
+      return PDJSON_ERROR;
     }
   }
 
@@ -1131,10 +1131,10 @@ read_number (json_stream *json, int c)
     if (is_dec_digit (c)) // IOERROR: not EOF.
     {
       if (!read_dec_digits (json))
-        return JSON_ERROR;
+        return PDJSON_ERROR;
     }
     else if (json->flags & FLAG_ERROR) // IOERROR
-      return JSON_ERROR;
+      return PDJSON_ERROR;
   }
   else if (c == '0')
   {
@@ -1152,38 +1152,38 @@ read_number (json_stream *json, int c)
 
       return (pushchar (json, c)     &&
               read_hex_digits (json) &&
-              pushchar (json, '\0')) ? JSON_NUMBER : JSON_ERROR;
+              pushchar (json, '\0')) ? PDJSON_NUMBER : PDJSON_ERROR;
     }
     // There is a nuance: `01` in normal mode is two values.
     //
     else if (!(json->flags & FLAG_STREAMING) && is_dec_digit (c))
     {
       json_error (json, "%s", "leading '0' in number");
-      return JSON_ERROR;
+      return PDJSON_ERROR;
     }
     else if (json->flags & FLAG_ERROR) // IOERROR
-      return JSON_ERROR;
+      return PDJSON_ERROR;
   }
   // Note that we can only get `I`, `N`, and `.` here if we are in the JSON5
   // mode.
   //
   else if (c == 'I')
-    return is_match (json, "Infinity", true /* copy */, JSON_NUMBER);
+    return is_match (json, "Infinity", true /* copy */, PDJSON_NUMBER);
   else if (c == 'N')
-    return is_match (json, "NaN", true /* copy */, JSON_NUMBER);
+    return is_match (json, "NaN", true /* copy */, PDJSON_NUMBER);
   else if (c == '.')
   {
     // It is more straightforward to handle leading dot as a special case. It
     // also takes care of the invalid sole dot case.
     //
     if (!read_dec_digits (json))
-      return JSON_ERROR;
+      return PDJSON_ERROR;
 
     c = source_peek (json);
     if (c != 'e' && c != 'E') // IOERROR
       return !(json->flags & FLAG_ERROR) && pushchar (json, '\0')
-        ? JSON_NUMBER
-        : JSON_ERROR;
+        ? PDJSON_NUMBER
+        : PDJSON_ERROR;
   }
 
   // Up to decimal or exponent has been read.
@@ -1192,8 +1192,8 @@ read_number (json_stream *json, int c)
   if (c != '.' && c != 'e' && c != 'E') // IOERROR
   {
     return !(json->flags & FLAG_ERROR) && pushchar (json, '\0')
-      ? JSON_NUMBER
-      : JSON_ERROR;
+      ? PDJSON_NUMBER
+      : PDJSON_ERROR;
   }
 
   if (c == '.')
@@ -1201,13 +1201,13 @@ read_number (json_stream *json, int c)
     source_get (json); // Consume.
 
     if (!pushchar (json, c))
-      return JSON_ERROR;
+      return PDJSON_ERROR;
 
     if ((json->flags & FLAG_JSON5) &&
         !is_dec_digit (source_peek (json))) // IOERROR: subsequent peek/get.
       ; // Trailing dot.
     else if (!read_dec_digits (json))
-      return JSON_ERROR;
+      return PDJSON_ERROR;
   }
 
   /* Check for exponent. */
@@ -1216,7 +1216,7 @@ read_number (json_stream *json, int c)
   {
     source_get (json); // Consume.
     if (!pushchar (json, c))
-      return JSON_ERROR;
+      return PDJSON_ERROR;
 
     c = source_peek (json);
     if (c == '+' || c == '-')
@@ -1224,32 +1224,32 @@ read_number (json_stream *json, int c)
       source_get (json); // Consume.
 
       if (!pushchar (json, c))
-        return JSON_ERROR;
+        return PDJSON_ERROR;
 
       if (!read_dec_digits (json))
-        return JSON_ERROR;
+        return PDJSON_ERROR;
     }
     else if (is_dec_digit (c))
     {
       if (!read_dec_digits (json))
-        return JSON_ERROR;
+        return PDJSON_ERROR;
     }
     else // IOERROR
     {
       source_get (json); // Consume.
       json_error (json, "unexpected %s in number", diag_char (json, c));
-      return JSON_ERROR;
+      return PDJSON_ERROR;
     }
   }
   // else IOERROR
 
   return !(json->flags & FLAG_ERROR) && pushchar (json, '\0')
-    ? JSON_NUMBER
-    : JSON_ERROR;
+    ? PDJSON_NUMBER
+    : PDJSON_ERROR;
 }
 
 bool
-is_space (json_stream *json, int c)
+is_space (pdjson_stream *json, int c)
 {
   switch (c)
   {
@@ -1275,7 +1275,7 @@ is_space (json_stream *json, int c)
 // value if not NULL. Trigger an error and return false if it's not.
 //
 static bool
-read_space (json_stream *json, int c, uint32_t* cp)
+read_space (pdjson_stream *json, int c, uint32_t* cp)
 {
 #if 0
   assert (c != EOF && (unsigned int)c >= 0x80);
@@ -1354,7 +1354,7 @@ read_space (json_stream *json, int c, uint32_t* cp)
 }
 
 static void
-newline (json_stream *json)
+newline (pdjson_stream *json)
 {
   json->lineno++;
   json->linepos = json->source.position;
@@ -1369,7 +1369,7 @@ newline (json_stream *json)
 // flag.
 //
 static int
-skip_comment (json_stream *json, int c)
+skip_comment (pdjson_stream *json, int c)
 {
   switch (c)
   {
@@ -1425,13 +1425,13 @@ skip_comment (json_stream *json, int c)
 }
 
 bool
-json_is_space (json_stream *json, int c)
+pdjson_is_space (pdjson_stream *json, int c)
 {
   return is_space (json, c);
 }
 
 int
-json_skip_if_space (json_stream *json, int c, uint32_t* cp)
+pdjson_skip_if_space (pdjson_stream *json, int c, uint32_t* cp)
 {
   json->start_lineno = 0;
   json->start_colno = 0;
@@ -1464,8 +1464,8 @@ json_skip_if_space (json_stream *json, int c, uint32_t* cp)
   {
     source_get (json); // Consume.
 
-    uint64_t lineno = json_get_line (json);
-    uint64_t colno = json_get_column (json);
+    uint64_t lineno = pdjson_get_line (json);
+    uint64_t colno = pdjson_get_column (json);
 
     if (c == '/')
     {
@@ -1506,7 +1506,7 @@ json_skip_if_space (json_stream *json, int c, uint32_t* cp)
 // by returning EOF and setting the error flag.
 //
 // Note that this is the only function (besides the user-facing
-// json_source_get()) that needs to worry about newline housekeeping.
+// pdjson_source_get()) that needs to worry about newline housekeeping.
 //
 // Note also that we currently don't treat sole \r as a newline for the
 // line/column counting purposes, even though JSON5 treats it as such (in
@@ -1517,7 +1517,7 @@ json_skip_if_space (json_stream *json, int c, uint32_t* cp)
 // We will also require \n, not just \r, to be able to omit `,` in JSON5E.
 //
 static int
-next (json_stream *json)
+next (pdjson_stream *json)
 {
   json->flags &= ~FLAG_NEWLINE;
 
@@ -1568,25 +1568,25 @@ next (json_stream *json)
 
 // The passed byte is expected to be consumed.
 //
-static enum json_type
-read_value (json_stream *json, int c)
+static enum pdjson_type
+read_value (pdjson_stream *json, int c)
 {
-  uint64_t colno = json_get_column (json);
+  uint64_t colno = pdjson_get_column (json);
 
   json->ntokens++;
 
-  enum json_type type = (enum json_type)0;
+  enum pdjson_type type = (enum pdjson_type)0;
   switch (c)
   {
   case EOF:
     json_error (json, "%s", "unexpected end of text");
-    type = JSON_ERROR;
+    type = PDJSON_ERROR;
     break;
   case '{':
-    type = push (json, JSON_OBJECT);
+    type = push (json, PDJSON_OBJECT);
     break;
   case '[':
-    type = push (json, JSON_ARRAY);
+    type = push (json, PDJSON_ARRAY);
     break;
   case '\'':
     if (!(json->flags & FLAG_JSON5))
@@ -1596,13 +1596,13 @@ read_value (json_stream *json, int c)
     type = read_string (json, c);
     break;
   case 'n':
-    type = is_match (json, "null", false /* copy */, JSON_NULL);
+    type = is_match (json, "null", false /* copy */, PDJSON_NULL);
     break;
   case 'f':
-    type = is_match (json, "false", false /* copy */, JSON_FALSE);
+    type = is_match (json, "false", false /* copy */, PDJSON_FALSE);
     break;
   case 't':
-    type = is_match (json, "true", false /* copy */, JSON_TRUE);
+    type = is_match (json, "true", false /* copy */, PDJSON_TRUE);
     break;
   case '+':
   case '.': // Leading dot
@@ -1631,10 +1631,10 @@ read_value (json_stream *json, int c)
   if (type == 0)
   {
     json_error (json, "unexpected %s in value", diag_char (json, c));
-    type = JSON_ERROR;
+    type = PDJSON_ERROR;
   }
 
-  if (type != JSON_ERROR)
+  if (type != PDJSON_ERROR)
     json->start_colno = colno;
 
   return type;
@@ -1678,18 +1678,18 @@ is_subseq_id_char (int c, bool extended)
 
 // Read the remainder of an identifier given its first character.
 //
-static enum json_type
-read_identifier (json_stream *json, int c)
+static enum pdjson_type
+read_identifier (pdjson_stream *json, int c)
 {
   if (json->data.string == NULL && !init_string (json))
-    return JSON_ERROR;
+    return PDJSON_ERROR;
 
   json->data.string_fill = 0;
 
   for (bool extended = (json->flags & FLAG_JSON5E);;)
   {
     if (!pushchar (json, c))
-      return JSON_ERROR;
+      return PDJSON_ERROR;
 
     c = source_peek (json);
 
@@ -1700,73 +1700,73 @@ read_identifier (json_stream *json, int c)
   }
 
   return !(json->flags & FLAG_ERROR) && pushchar (json, '\0') // IOERROR
-    ? JSON_NAME
-    : JSON_ERROR;
+    ? PDJSON_NAME
+    : PDJSON_ERROR;
 }
 
-static enum json_type
-read_name (json_stream *json, int c)
+static enum pdjson_type
+read_name (pdjson_stream *json, int c)
 {
-  uint64_t colno = json_get_column (json);
+  uint64_t colno = pdjson_get_column (json);
 
   json->ntokens++;
 
   if (c == '"' || ((json->flags & FLAG_JSON5) && c == '\''))
   {
-    if (read_string (json, c) == JSON_ERROR)
-      return JSON_ERROR;
+    if (read_string (json, c) == PDJSON_ERROR)
+      return PDJSON_ERROR;
   }
   // See if this is an unquoted member name.
   //
   else if ((json->flags & FLAG_JSON5) && is_first_id_char (c))
   {
-    if (read_identifier (json, c) == JSON_ERROR)
-      return JSON_ERROR;
+    if (read_identifier (json, c) == PDJSON_ERROR)
+      return PDJSON_ERROR;
   }
   else
   {
     json_error (json, "%s", "expected member name");
-    return JSON_ERROR;
+    return PDJSON_ERROR;
   }
 
   json->start_colno = colno;
 
-  return JSON_NAME;
+  return PDJSON_NAME;
 }
 
-enum json_type
-json_peek (json_stream *json)
+enum pdjson_type
+pdjson_peek (pdjson_stream *json)
 {
-  enum json_type peek;
+  enum pdjson_type peek;
   if (json->peek)
     peek = json->peek;
   else
-    peek = json->peek = json_next (json);
+    peek = json->peek = pdjson_next (json);
   return peek;
 }
 
-enum json_type
-json_next (json_stream *json)
+enum pdjson_type
+pdjson_next (pdjson_stream *json)
 {
   if (json->flags & FLAG_ERROR)
-    return JSON_ERROR;
+    return PDJSON_ERROR;
 
   if (json->peek != 0)
   {
-    enum json_type next = json->peek;
-    json->peek = (enum json_type)0;
+    enum pdjson_type next = json->peek;
+    json->peek = (enum pdjson_type)0;
     return next;
   }
 
   if (json->pending.type != 0)
   {
-    enum json_type next = json->pending.type;
-    json->pending.type = (enum json_type)0;
+    enum pdjson_type next = json->pending.type;
+    json->pending.type = (enum pdjson_type)0;
     json->subtype = json->pending.subtype;
     json->start_lineno = json->pending.lineno;
     json->start_colno = json->pending.colno;
 
-    if (next == JSON_OBJECT_END || next == JSON_ARRAY_END)
+    if (next == PDJSON_OBJECT_END || next == PDJSON_ARRAY_END)
       next = pop (json, next);
 
     return next;
@@ -1780,7 +1780,7 @@ json_next (json_stream *json)
   {
     /* In the streaming mode leave any trailing whitespaces in the stream.
      * This allows the user to validate any desired separation between
-     * values (such as newlines) using json_source_get/peek() with any
+     * values (such as newlines) using pdjson_source_get/peek() with any
      * remaining whitespaces ignored as leading when we parse the next
      * value. */
     if (!(json->flags & FLAG_STREAMING))
@@ -1792,35 +1792,35 @@ json_next (json_stream *json)
       {
         int c = next (json);
         if (json->flags & FLAG_ERROR)
-          return JSON_ERROR;
+          return PDJSON_ERROR;
 
         if (c != EOF)
         {
           json_error (json,
                       "expected end of text instead of %s",
                       diag_char (json, c));
-          return JSON_ERROR;
+          return PDJSON_ERROR;
         }
       }
     }
 
-    return JSON_DONE;
+    return PDJSON_DONE;
   }
 
   int c = next (json);
   if (json->flags & FLAG_ERROR)
-    return JSON_ERROR;
+    return PDJSON_ERROR;
 
   if (json->stack_top != (size_t)-1)
   {
-    if (json->stack[json->stack_top].type == JSON_OBJECT)
+    if (json->stack[json->stack_top].type == PDJSON_OBJECT)
     {
       if (json->stack[json->stack_top].count == 0)
       {
         // No member name/value pairs yet.
         //
         if (c == '}')
-          return pop (json, JSON_OBJECT_END);
+          return pop (json, PDJSON_OBJECT_END);
 
         json->stack[json->stack_top].count++;
 
@@ -1845,7 +1845,7 @@ json_next (json_stream *json)
         {
           c = next (json);
           if (json->flags & FLAG_ERROR)
-            return JSON_ERROR;
+            return PDJSON_ERROR;
 
           if (((json->flags & FLAG_JSON5) && c == '}') ||
               (implied && c == EOF))
@@ -1867,26 +1867,26 @@ json_next (json_stream *json)
         if (!implied)
         {
           if (c == '}')
-            return pop (json, JSON_OBJECT_END);
+            return pop (json, PDJSON_OBJECT_END);
 
           json_error (json,
                       "%s",
                       ((json->flags & FLAG_JSON5E)
                        ? "expected '}', newline, or ',' after member value"
                        : "expected ',' or '}' after member value"));
-          return JSON_ERROR;
+          return PDJSON_ERROR;
         }
 
         // Handle implied `}`.
         //
         if (c == EOF)
         {
-          json->pending.type = JSON_DONE;
+          json->pending.type = PDJSON_DONE;
           json->pending.subtype = 0;
           json->pending.lineno = 0;
           json->pending.colno = 0;
 
-          return pop (json, JSON_OBJECT_END);
+          return pop (json, PDJSON_OBJECT_END);
         }
 
         if (c == '}')
@@ -1898,7 +1898,7 @@ json_next (json_stream *json)
           json_error (json, "%s", "expected newline or ',' after member value");
         }
 
-        return JSON_ERROR;
+        return PDJSON_ERROR;
       }
       else
       {
@@ -1908,7 +1908,7 @@ json_next (json_stream *json)
         {
           c = next (json);
           if (json->flags & FLAG_ERROR)
-            return JSON_ERROR;
+            return PDJSON_ERROR;
 
           json->stack[json->stack_top].count++;
 
@@ -1916,13 +1916,13 @@ json_next (json_stream *json)
         }
 
         json_error (json, "%s", "expected ':' after member name");
-        return JSON_ERROR;
+        return PDJSON_ERROR;
       }
     }
     else
     {
 #if 0
-      assert (json->stack[json->stack_top].type == JSON_ARRAY);
+      assert (json->stack[json->stack_top].type == PDJSON_ARRAY);
 #endif
 
       if (json->stack[json->stack_top].count == 0)
@@ -1930,7 +1930,7 @@ json_next (json_stream *json)
         // No array values yet.
         //
         if (c == ']')
-          return pop (json, JSON_ARRAY_END);
+          return pop (json, PDJSON_ARRAY_END);
 
         json->stack[json->stack_top].count++;
         return read_value (json, c);
@@ -1950,7 +1950,7 @@ json_next (json_stream *json)
       {
         c = next (json);
         if (json->flags & FLAG_ERROR)
-          return JSON_ERROR;
+          return PDJSON_ERROR;
 
         if ((json->flags & FLAG_JSON5) && c == ']')
           ; // Fall through.
@@ -1969,20 +1969,20 @@ json_next (json_stream *json)
       }
 
       if (c == ']')
-        return pop (json, JSON_ARRAY_END);
+        return pop (json, PDJSON_ARRAY_END);
 
       json_error (json,
                   "%s",
                   ((json->flags & FLAG_JSON5E)
                    ? "expected ']', newline, or ',' after array value"
                    : "expected ',' or ']' after array value"));
-      return JSON_ERROR;
+      return PDJSON_ERROR;
     }
   }
   else
   {
     if (c == EOF && (json->flags & FLAG_STREAMING))
-      return JSON_DONE;
+      return PDJSON_DONE;
 
     // Sniff out implied `{`.
     //
@@ -2004,17 +2004,17 @@ json_next (json_stream *json)
       bool id;
       if ((id = is_first_id_char (c)) || c == '"' || c == '\'')
       {
-        uint64_t lineno = json_get_line (json);
-        uint64_t colno = json_get_column (json);
+        uint64_t lineno = pdjson_get_line (json);
+        uint64_t colno = pdjson_get_column (json);
 
         json->ntokens++;
 
         if ((id
              ? read_identifier (json, c)
-             : read_string (json, c)) == JSON_ERROR)
-          return JSON_ERROR;
+             : read_string (json, c)) == PDJSON_ERROR)
+          return PDJSON_ERROR;
 
-        enum json_type type;
+        enum pdjson_type type;
 
         // Peek at the next non-whitespace/comment character, similar to
         // next(). Note that skipping comments would require a two-character
@@ -2054,7 +2054,7 @@ json_next (json_stream *json)
             source_get (json); // Consume;
 
             if (!read_space (json, c, first ? &ncp : NULL))
-              return JSON_ERROR;
+              return PDJSON_ERROR;
 
             continue;
           }
@@ -2078,7 +2078,7 @@ json_next (json_stream *json)
             if ((c = skip_comment (json, c)) == EOF)
             {
               if (json->flags & FLAG_ERROR)
-                return JSON_ERROR;
+                return PDJSON_ERROR;
 
               break;
             }
@@ -2087,7 +2087,7 @@ json_next (json_stream *json)
 
         if (c == ':')
         {
-          json->pending.type = JSON_NAME;
+          json->pending.type = PDJSON_NAME;
           json->pending.subtype = 0;
           json->pending.lineno = lineno;
           json->pending.colno = colno;
@@ -2095,9 +2095,9 @@ json_next (json_stream *json)
           json->flags |= FLAG_IMPLIED_END;
 
           json->ntokens++; // For `{`.
-          type = push (json, JSON_OBJECT);
+          type = push (json, PDJSON_OBJECT);
 
-          if (type != JSON_ERROR)
+          if (type != PDJSON_ERROR)
             json->stack[json->stack_top].count++; // For pending name.
         }
         else if (!(json->flags & FLAG_ERROR)) // IOERROR
@@ -2115,44 +2115,44 @@ json_next (json_stream *json)
             switch (json->data.string[0])
             {
             case 'n':
-              type = is_match_string (json, "null", ncp , &colno, JSON_NULL);
+              type = is_match_string (json, "null", ncp , &colno, PDJSON_NULL);
               break;
             case 't':
-              type = is_match_string (json, "true", ncp , &colno, JSON_TRUE);
+              type = is_match_string (json, "true", ncp , &colno, PDJSON_TRUE);
               break;
             case 'f':
-              type = is_match_string (json, "false", ncp , &colno, JSON_FALSE);
+              type = is_match_string (json, "false", ncp , &colno, PDJSON_FALSE);
               break;
             case 'I':
-              type = is_match_string (json, "Infinity", ncp , &colno, JSON_NUMBER);
+              type = is_match_string (json, "Infinity", ncp , &colno, PDJSON_NUMBER);
               break;
             case 'N':
-              type = is_match_string (json, "NaN", ncp , &colno, JSON_NUMBER);
+              type = is_match_string (json, "NaN", ncp , &colno, PDJSON_NUMBER);
               break;
             default:
               json_error (json,
                           "unexpected %s in value",
                           diag_char_string (json, json->data.string));
-              type = JSON_ERROR;
+              type = PDJSON_ERROR;
             }
           }
           else
-            type = JSON_STRING;
+            type = PDJSON_STRING;
 
           // Per the above comment handling logic, if the character we are
           // looking at is `/`, then it is consumed, not peeked at, and so we
           // have to diagnose it here.
           //
-          if (type != JSON_ERROR && c == '/')
+          if (type != PDJSON_ERROR && c == '/')
           {
             json_error (json,
                         "expected end of text instead of %s",
                         diag_char (json, c));
-            return JSON_ERROR; // Don't override location.
+            return PDJSON_ERROR; // Don't override location.
           }
         }
         else
-          return JSON_ERROR; // IOERROR (don't override location).
+          return PDJSON_ERROR; // IOERROR (don't override location).
 
         // Note: set even in case of an error since peek() above moved the
         // position past the name/value.
@@ -2167,7 +2167,7 @@ json_next (json_stream *json)
         // Allow empty implied objects (for example, all members commented
         // out).
         //
-        json->pending.type = JSON_OBJECT_END;
+        json->pending.type = PDJSON_OBJECT_END;
         json->pending.subtype = 0;
         json->pending.lineno = 0;
         json->pending.colno = 0;
@@ -2178,10 +2178,10 @@ json_next (json_stream *json)
         json->start_colno = 1;
 
         // Note that we need to push an object entry into the stack to make
-        // sure json_get_context() works correctly.
+        // sure pdjson_get_context() works correctly.
         //
         json->ntokens++; // For `{`.
-        return push (json, JSON_OBJECT);
+        return push (json, PDJSON_OBJECT);
       }
       // Else fall through.
     }
@@ -2191,7 +2191,7 @@ json_next (json_stream *json)
 }
 
 void
-json_reset (json_stream *json)
+pdjson_reset (pdjson_stream *json)
 {
   json->stack_top = (size_t)-1;
   json->ntokens = 0;
@@ -2199,25 +2199,25 @@ json_reset (json_stream *json)
   json->error_message[0] = '\0';
 }
 
-enum json_type
-json_skip (json_stream *json)
+enum pdjson_type
+pdjson_skip (pdjson_stream *json)
 {
-  enum json_type type = json_next (json);
+  enum pdjson_type type = pdjson_next (json);
   uint64_t cnt_arr = 0;
   uint64_t cnt_obj = 0;
 
-  for (enum json_type skip = type; ; skip = json_next (json))
+  for (enum pdjson_type skip = type; ; skip = pdjson_next (json))
   {
-    if (skip == JSON_ERROR || skip == JSON_DONE)
+    if (skip == PDJSON_ERROR || skip == PDJSON_DONE)
       return skip;
 
-    if (skip == JSON_ARRAY)
+    if (skip == PDJSON_ARRAY)
       ++cnt_arr;
-    else if (skip == JSON_ARRAY_END && cnt_arr > 0)
+    else if (skip == PDJSON_ARRAY_END && cnt_arr > 0)
       --cnt_arr;
-    else if (skip == JSON_OBJECT)
+    else if (skip == PDJSON_OBJECT)
       ++cnt_obj;
-    else if (skip == JSON_OBJECT_END && cnt_obj > 0)
+    else if (skip == PDJSON_OBJECT_END && cnt_obj > 0)
       --cnt_obj;
 
     if (!cnt_arr && !cnt_obj)
@@ -2227,14 +2227,14 @@ json_skip (json_stream *json)
   return type;
 }
 
-enum json_type
-json_skip_until (json_stream *json, enum json_type type)
+enum pdjson_type
+pdjson_skip_until (pdjson_stream *json, enum pdjson_type type)
 {
   while (true)
   {
-    enum json_type skip = json_skip (json);
+    enum pdjson_type skip = pdjson_skip (json);
 
-    if (skip == JSON_ERROR || skip == JSON_DONE)
+    if (skip == PDJSON_ERROR || skip == PDJSON_DONE)
       return skip;
 
     if (skip == type)
@@ -2244,20 +2244,20 @@ json_skip_until (json_stream *json, enum json_type type)
   return type;
 }
 
-LIBPDJSON5_SYMEXPORT enum json_error_subtype
-json_get_error_subtype (json_stream *json)
+LIBPDJSON5_SYMEXPORT enum pdjson_error_subtype
+pdjson_get_error_subtype (pdjson_stream *json)
 {
-  return (enum json_error_subtype)json->subtype;
+  return (enum pdjson_error_subtype)json->subtype;
 }
 
 const char *
-json_get_name (json_stream *json, size_t *size)
+pdjson_get_name (pdjson_stream *json, size_t *size)
 {
-  return json_get_value (json, size);
+  return pdjson_get_value (json, size);
 }
 
 const char *
-json_get_value (json_stream *json, size_t *size)
+pdjson_get_value (pdjson_stream *json, size_t *size)
 {
   if (size != NULL)
     *size = json->data.string_fill;
@@ -2269,19 +2269,19 @@ json_get_value (json_stream *json, size_t *size)
 }
 
 const char *
-json_get_error (json_stream *json)
+pdjson_get_error (pdjson_stream *json)
 {
   return json->flags & FLAG_ERROR ? json->error_message : NULL;
 }
 
 uint64_t
-json_get_line (json_stream *json)
+pdjson_get_line (pdjson_stream *json)
 {
   return json->start_lineno == 0 ? json->lineno : json->start_lineno;
 }
 
 uint64_t
-json_get_column (json_stream *json)
+pdjson_get_column (pdjson_stream *json)
 {
   return json->start_colno == 0
     ? (json->source.position == 0
@@ -2291,22 +2291,25 @@ json_get_column (json_stream *json)
 }
 
 uint64_t
-json_get_position (json_stream *json)
+pdjson_get_position (pdjson_stream *json)
 {
   return json->source.position;
 }
 
 size_t
-json_get_depth (json_stream *json)
+pdjson_get_depth (pdjson_stream *json)
 {
   return json->stack_top + 1;
 }
 
-enum json_type
-json_get_context (json_stream *json, uint64_t *count)
+enum pdjson_type
+pdjson_get_context (pdjson_stream *json, uint64_t *count)
 {
+  if (json->flags & FLAG_ERROR)
+    return PDJSON_ERROR;
+
   if (json->stack_top == (size_t)-1)
-    return JSON_DONE;
+    return PDJSON_DONE;
 
   if (count != NULL)
     *count = json->stack[json->stack_top].count;
@@ -2315,7 +2318,7 @@ json_get_context (json_stream *json, uint64_t *count)
 }
 
 int
-json_source_get (json_stream *json)
+pdjson_source_get (pdjson_stream *json)
 {
   // If the caller reads a multi-byte UTF-8 sequence, we expect them to read
   // it in its entirety. We also assume that any invalid bytes within such a
@@ -2346,7 +2349,7 @@ json_source_get (json_stream *json)
 }
 
 int
-json_source_peek (json_stream *json)
+pdjson_source_peek (pdjson_stream *json)
 {
   json->flags &= ~FLAG_ERROR;
 
@@ -2354,51 +2357,51 @@ json_source_peek (json_stream *json)
 }
 
 bool
-json_source_error (json_stream *json)
+pdjson_source_error (pdjson_stream *json)
 {
-  return (json->flags & FLAG_ERROR) && (json->subtype & JSON_ERROR_IO);
+  return (json->flags & FLAG_ERROR) && (json->subtype & PDJSON_ERROR_IO);
 }
 
 void
-json_open_buffer (json_stream *json, const void *buffer, size_t size)
+pdjson_open_buffer (pdjson_stream *json, const void *buffer, size_t size)
 {
   init (json);
-  json->source.tag = JSON_SOURCE_BUFFER;
+  json->source.tag = PDJSON_SOURCE_BUFFER;
   json->source.source.buffer.buffer = (const char *)buffer;
   json->source.source.buffer.length = size;
 }
 
 void
-json_open_string (json_stream *json, const char *string)
+pdjson_open_string (pdjson_stream *json, const char *string)
 {
-  json_open_buffer (json, string, strlen (string));
+  pdjson_open_buffer (json, string, strlen (string));
 }
 
 void
-json_open_stream (json_stream *json, FILE *stream)
+pdjson_open_stream (pdjson_stream *json, FILE *stream)
 {
   init (json);
-  json->source.tag = JSON_SOURCE_STREAM;
+  json->source.tag = PDJSON_SOURCE_STREAM;
   json->source.source.stream.stream = stream;
 }
 
 void
-json_open_user (json_stream *json, const json_user_io *io, void *data)
+pdjson_open_user (pdjson_stream *json, const pdjson_user_io *io, void *data)
 {
   init (json);
-  json->source.tag = JSON_SOURCE_USER;
+  json->source.tag = PDJSON_SOURCE_USER;
   json->source.source.user.data = data;
   json->source.source.user.io = *io;
 }
 
 void
-json_set_allocator (json_stream *json, const json_allocator *a)
+pdjson_set_allocator (pdjson_stream *json, const pdjson_allocator *a)
 {
   json->alloc = *a;
 }
 
 void
-json_set_streaming (json_stream *json, bool mode)
+pdjson_set_streaming (pdjson_stream *json, bool mode)
 {
   if (mode)
     json->flags |= FLAG_STREAMING;
@@ -2407,25 +2410,25 @@ json_set_streaming (json_stream *json, bool mode)
 }
 
 void
-json_set_language (json_stream *json, enum json_language language)
+pdjson_set_language (pdjson_stream *json, enum pdjson_language language)
 {
   switch (language)
   {
-  case JSON_LANGUAGE_JSON:
+  case PDJSON_LANGUAGE_JSON:
     json->flags &= ~(FLAG_JSON5 | FLAG_JSON5E);
     break;
-  case JSON_LANGUAGE_JSON5:
+  case PDJSON_LANGUAGE_JSON5:
     json->flags &= ~FLAG_JSON5E;
     json->flags |= FLAG_JSON5;
     break;
-  case JSON_LANGUAGE_JSON5E:
+  case PDJSON_LANGUAGE_JSON5E:
     json->flags |= FLAG_JSON5 | FLAG_JSON5E;
     break;
   }
 }
 
 void
-json_close (json_stream *json)
+pdjson_close (pdjson_stream *json)
 {
   json->alloc.free (json->stack);
   json->alloc.free (json->data.string);
