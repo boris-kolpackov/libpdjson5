@@ -121,6 +121,58 @@ is_legal_utf8 (const unsigned char *bytes, size_t length)
   return *bytes <= 0xF4;
 }
 
+static int
+source_get (json_stream *json)
+{
+  struct json_source *source = &json->source;
+
+  int c = EOF;
+  switch (source->tag)
+  {
+  case JSON_SOURCE_BUFFER:
+    c = source->position != source->source.buffer.length
+      ? source->source.buffer.buffer[source->position]
+      : EOF;
+    break;
+  case JSON_SOURCE_USER:
+    c = source->source.user.get (source->source.user.data);
+    break;
+  case JSON_SOURCE_STREAM:
+    c = fgetc (source->source.stream.stream);
+    break;
+  }
+
+  if (c != EOF)
+    source->position++;
+
+  return c;
+}
+
+static int
+source_peek (json_stream *json)
+{
+  struct json_source *source = &json->source;
+
+  int c = EOF;
+  switch (source->tag)
+  {
+  case JSON_SOURCE_BUFFER:
+    c = source->position != source->source.buffer.length
+      ? source->source.buffer.buffer[source->position]
+      : EOF;
+    break;
+  case JSON_SOURCE_USER:
+    c = source->source.user.peek (source->source.user.data);
+    break;
+  case JSON_SOURCE_STREAM:
+    c = fgetc (source->source.stream.stream);
+    ungetc (c, source->source.stream.stream);
+    break;
+  }
+
+  return c;
+}
+
 // Given the first byte of input or EOF (-1), read and decode the remaining
 // bytes of a UTF-8 sequence (if any) and return its single-quoted UTF-8
 // representation (e.g., "'A'") or, for control characters, its name (e.g.,
@@ -169,7 +221,7 @@ diag_char (json_stream *json, int c)
     size_t j;
     for (j = 1; j != n; ++j)
     {
-      if ((c = json->source.get (&json->source)) == EOF)
+      if ((c = source_get (json)) == EOF)
         break;
 
       s[i++] = c;
@@ -320,41 +372,6 @@ pop (json_stream *json, enum json_type type)
   return type;
 }
 
-static int
-buffer_peek (struct json_source *source)
-{
-  if (source->position < source->source.buffer.length)
-    return source->source.buffer.buffer[source->position];
-  else
-    return EOF;
-}
-
-static int
-buffer_get (struct json_source *source)
-{
-  int c = source->peek (source);
-  if (c != EOF)
-    source->position++;
-  return c;
-}
-
-static int
-stream_get (struct json_source *source)
-{
-  int c = fgetc (source->source.stream.stream);
-  if (c != EOF)
-    source->position++;
-  return c;
-}
-
-static int
-stream_peek (struct json_source *source)
-{
-  int c = fgetc (source->source.stream.stream);
-  ungetc (c, source->source.stream.stream);
-  return c;
-}
-
 static void
 init (json_stream *json)
 {
@@ -419,7 +436,7 @@ is_match (json_stream *json,
   int c;
   for (const char *p = pattern + 1; *p; p++)
   {
-    if (*p != (c = json->source.get (&json->source)))
+    if (*p != (c = source_get (json)))
     {
       json_error (json,
                   "expected '%c' instead of %s in '%s'",
@@ -587,7 +604,7 @@ read_unicode_cp (json_stream *json)
 
   for (size_t i = 0; i < 4; i++)
   {
-    int c = json->source.get (&json->source);
+    int c = source_get (json);
     int hc;
 
     if (c == EOF)
@@ -625,7 +642,7 @@ read_unicode (json_stream *json)
      */
     h = cp;
 
-    int c = json->source.get (&json->source);
+    int c = source_get (json);
     if (c == EOF)
     {
       json_error (json, "%s", "unterminated string literal in Unicode");
@@ -639,7 +656,7 @@ read_unicode (json_stream *json)
       return -1;
     }
 
-    c = json->source.get (&json->source);
+    c = source_get (json);
     if (c == EOF)
     {
       json_error (json, "%s", "unterminated string literal in Unicode");
@@ -686,7 +703,7 @@ read_latin_cp (json_stream *json)
 
   for (size_t i = 0; i < 2; i++)
   {
-    int c = json->source.get (&json->source);
+    int c = source_get (json);
     int hc;
 
     if (c == EOF)
@@ -723,7 +740,7 @@ read_latin (json_stream *json)
 static int
 read_escaped (json_stream *json)
 {
-  int c = json->source.get (&json->source);
+  int c = source_get (json);
   if (c == EOF)
   {
     json_error (json, "%s", "unterminated string literal in escape");
@@ -779,10 +796,10 @@ read_escaped (json_stream *json)
     case '0':
       // Check that it's not followed by a digit (see above).
       //
-      c = json->source.peek (&json->source);
+      c = source_peek (json);
       if (c >= '0' && c <= '9')
       {
-        json->source.get (&json->source);
+        source_get (json);
         u = -1;
       }
       else
@@ -806,8 +823,8 @@ read_escaped (json_stream *json)
     case '\r':
       // Check if it's followed by \n (CRLF).
       //
-      if (json->source.peek (&json->source) == '\n')
-        json->source.get (&json->source);
+      if (source_peek (json) == '\n')
+        source_get (json);
 
       // Fall through.
     case '\n':
@@ -845,7 +862,7 @@ read_utf8 (json_stream* json, int c)
   size_t i;
   for (i = 1; i < n; ++i)
   {
-    if ((c = json->source.get (&json->source)) == EOF)
+    if ((c = source_get (json)) == EOF)
       break;
 
     buf[i] = c;
@@ -877,7 +894,7 @@ read_string (json_stream *json, int quote)
 
   while (true)
   {
-    int c = json->source.get (&json->source);
+    int c = source_get (json);
     if (c == EOF)
     {
       json_error (json, "%s", "unterminated string literal");
@@ -939,9 +956,9 @@ read_dec_digits (json_stream *json)
 {
   int c;
   size_t nread = 0;
-  while (is_dec_digit (c = json->source.peek (&json->source)))
+  while (is_dec_digit (c = source_peek (json)))
   {
-    json->source.get (&json->source);
+    source_get (json);
     if (pushchar (json, c) != 0)
       return -1;
 
@@ -950,7 +967,7 @@ read_dec_digits (json_stream *json)
 
   if (nread == 0)
   {
-    json->source.get (&json->source); // Consume.
+    source_get (json); // Consume.
 
     json_error (json,
                 "expected digit instead of %s",
@@ -974,9 +991,9 @@ read_hex_digits (json_stream *json)
 {
   int c;
   size_t nread = 0;
-  while (is_hex_digit (c = json->source.peek (&json->source)))
+  while (is_hex_digit (c = source_peek (json)))
   {
-    json->source.get (&json->source);
+    source_get (json);
     if (pushchar (json, c) != 0)
       return -1;
 
@@ -985,7 +1002,7 @@ read_hex_digits (json_stream *json)
 
   if (nread == 0)
   {
-    json->source.get (&json->source); // Consume.
+    source_get (json); // Consume.
 
     json_error (json, "expected hex digit instead of %s", diag_char (json, c));
     return -1;
@@ -1009,7 +1026,7 @@ read_number (json_stream *json, int c)
   //
   if (c == '-' || c == '+')
   {
-    c = json->source.get (&json->source);
+    c = source_get (json);
     if (is_dec_digit (c) ||
         ((json->flags & FLAG_JSON5) && (c == 'I' || c == 'N' || c == '.')))
     {
@@ -1027,7 +1044,7 @@ read_number (json_stream *json, int c)
 
   if (c >= '1' && c <= '9')
   {
-    c = json->source.peek (&json->source);
+    c = source_peek (json);
     if (is_dec_digit (c))
     {
       if (read_dec_digits (json) != 0)
@@ -1040,13 +1057,13 @@ read_number (json_stream *json, int c)
     // illegal, the reference implementation appears to reject it. So we
     // assume it is (issue #58 in json5-spec).
     //
-    c = json->source.peek (&json->source);
+    c = source_peek (json);
 
     if (c == '.' ||  c == 'e' || c == 'E')
       ;
     else if ((json->flags & FLAG_JSON5) && (c == 'x' || c == 'X'))
     {
-      json->source.get (&json->source); // Consume `x`/`X'.
+      source_get (json); // Consume `x`/`X'.
 
       return (pushchar (json, c) == 0     &&
               read_hex_digits (json) == 0 &&
@@ -1075,14 +1092,14 @@ read_number (json_stream *json, int c)
     if (read_dec_digits (json) != 0)
       return JSON_ERROR;
 
-    c = json->source.peek (&json->source);
+    c = source_peek (json);
     if (c != 'e' && c != 'E')
       return pushchar (json, '\0') == 0 ? JSON_NUMBER : JSON_ERROR;
   }
 
   // Up to decimal or exponent has been read.
   //
-  c = json->source.peek (&json->source);
+  c = source_peek (json);
   if (c != '.' && c != 'e' && c != 'E')
   {
     return pushchar (json, '\0') == 0 ? JSON_NUMBER : JSON_ERROR;
@@ -1090,30 +1107,29 @@ read_number (json_stream *json, int c)
 
   if (c == '.')
   {
-    json->source.get (&json->source); // Consume `.`.
+    source_get (json); // Consume `.`.
 
     if (pushchar (json, c) != 0)
       return JSON_ERROR;
 
-    if ((json->flags & FLAG_JSON5) &&
-        !is_dec_digit (json->source.peek (&json->source)))
+    if ((json->flags & FLAG_JSON5) && !is_dec_digit (source_peek (json)))
       ; // Trailing dot.
     else if (read_dec_digits (json) != 0)
       return JSON_ERROR;
   }
 
   /* Check for exponent. */
-  c = json->source.peek (&json->source);
+  c = source_peek (json);
   if (c == 'e' || c == 'E')
   {
-    json->source.get (&json->source); // Consume `e`/`E`.
+    source_get (json); // Consume `e`/`E`.
     if (pushchar (json, c) != 0)
       return JSON_ERROR;
 
-    c = json->source.peek (&json->source);
+    c = source_peek (json);
     if (c == '+' || c == '-')
     {
-      json->source.get (&json->source); // Consume `+`/`-`.
+      source_get (json); // Consume `+`/`-`.
 
       if (pushchar (json, c) != 0)
         return JSON_ERROR;
@@ -1128,7 +1144,7 @@ read_number (json_stream *json, int c)
     }
     else
     {
-      json->source.get (&json->source); // Consume.
+      source_get (json); // Consume.
 
       json_error (json, "unexpected %s in number", diag_char (json, c));
       return JSON_ERROR;
@@ -1196,7 +1212,7 @@ read_space (json_stream *json, int c, uint32_t* cp)
     size_t j;
     for (j = 1; j != n; ++j)
     {
-      if ((c = json->source.get (&json->source)) == EOF)
+      if ((c = source_get (json)) == EOF)
         break;
 
       s[i++] = c;
@@ -1268,7 +1284,7 @@ skip_comment (json_stream *json, int c)
     {
       // Skip everything until the next newline or EOF.
       //
-      while ((c = json->source.get (&json->source)) != EOF)
+      while ((c = source_get (json)) != EOF)
       {
         if (c == '\n')
         {
@@ -1287,13 +1303,13 @@ skip_comment (json_stream *json, int c)
     {
       // Skip everything until closing `*/` or EOF.
       //
-      while ((c = json->source.get (&json->source)) != EOF)
+      while ((c = source_get (json)) != EOF)
       {
         if (c == '*')
         {
-          if (json->source.peek (&json->source) == '/')
+          if (source_peek (json) == '/')
           {
-            c = json->source.get (&json->source); // Consume closing `/`.
+            c = source_get (json); // Consume closing `/`.
             break;
           }
         }
@@ -1331,7 +1347,7 @@ json_skip_if_space (json_stream *json, int c, uint32_t* cp)
 
   if (is_space (json, c))
   {
-    json->source.get (&json->source); // Consume.
+    source_get (json); // Consume.
 
     if (c == '\n')
       newline (json);
@@ -1344,7 +1360,7 @@ json_skip_if_space (json_stream *json, int c, uint32_t* cp)
 
   if ((unsigned int)c >= 0x80)
   {
-    json->source.get (&json->source); // Consume.
+    source_get (json); // Consume.
 
     return read_space (json, c, cp) ? 1 : -1;
   }
@@ -1352,14 +1368,14 @@ json_skip_if_space (json_stream *json, int c, uint32_t* cp)
   if ((c == '/' && (json->flags & FLAG_JSON5)) ||
       (c == '#' && (json->flags & FLAG_JSON5E)))
   {
-    json->source.get (&json->source); // Consume.
+    source_get (json); // Consume.
 
     uint64_t lineno = json_get_line (json);
     uint64_t colno = json_get_column (json);
 
     if (c == '/')
     {
-      c = json->source.peek (&json->source);
+      c = source_peek (json);
 
       if (c != '/' && c != '*')
       {
@@ -1369,7 +1385,7 @@ json_skip_if_space (json_stream *json, int c, uint32_t* cp)
         return -1;
       }
 
-      json->source.get (&json->source);
+      source_get (json);
     }
 
     skip_comment (json, c);
@@ -1414,7 +1430,7 @@ next (json_stream *json)
   int c;
   while (true)
   {
-    c = json->source.get (&json->source);
+    c = source_get (json);
 
     if (is_space (json, c))
     {
@@ -1440,9 +1456,9 @@ next (json_stream *json)
     {
       if (c == '/')
       {
-        int p = json->source.peek (&json->source);
+        int p = source_peek (json);
         if (p == '/' || p == '*')
-          c = json->source.get (&json->source);
+          c = source_get (json);
         else
           break;
       }
@@ -1581,12 +1597,12 @@ read_identifier (json_stream *json, int c)
     if (pushchar (json, c) != 0)
       return JSON_ERROR;
 
-    c = json->source.peek (&json->source);
+    c = source_peek (json);
 
     if (!is_subseq_id_char (c, extended))
       break;
 
-    json->source.get (&json->source);
+    source_get (json);
   }
 
   if (pushchar (json, '\0') != 0)
@@ -1922,7 +1938,7 @@ json_next (json_stream *json)
         uint32_t ncp;
         for (bool first = true; ; first = false)
         {
-          c = json->source.peek (&json->source);
+          c = source_peek (json);
 
           if (first)
           {
@@ -1939,7 +1955,7 @@ json_next (json_stream *json)
             // sequence identical to the non-extended mode. Save decoded
             // codepoint if first.
             //
-            json->source.get (&json->source); // Consume;
+            source_get (json); // Consume;
 
             if (!read_space (json, c, first ? &ncp : NULL))
               return JSON_ERROR;
@@ -1947,7 +1963,7 @@ json_next (json_stream *json)
             continue;
           }
 
-          json->source.get (&json->source);
+          source_get (json);
 
           if (c == '\n')
             newline (json);
@@ -1956,9 +1972,9 @@ json_next (json_stream *json)
           {
             if (c == '/')
             {
-              int p = json->source.peek (&json->source);
+              int p = source_peek (json);
               if (p == '/' || p == '*')
-                c = json->source.get (&json->source);
+                c = source_get (json);
               else
                 break; // Diagnose consumed '/' below.
             }
@@ -2203,7 +2219,7 @@ json_source_get (json_stream *json)
   // In JSON5, if the caller starts reading a comment, we expect them to
   // finish reading it.
 
-  int c = json->source.get (&json->source);
+  int c = source_get (json);
   if (json->linecon > 0)
   {
     /* Expecting a continuation byte within a multi-byte UTF-8 sequence. */
@@ -2222,15 +2238,14 @@ json_source_get (json_stream *json)
 int
 json_source_peek (json_stream *json)
 {
-  return json->source.peek (&json->source);
+  return source_peek (json);
 }
 
 void
 json_open_buffer (json_stream *json, const void *buffer, size_t size)
 {
   init (json);
-  json->source.get = buffer_get;
-  json->source.peek = buffer_peek;
+  json->source.tag = JSON_SOURCE_BUFFER;
   json->source.source.buffer.buffer = (const char *)buffer;
   json->source.source.buffer.length = size;
 }
@@ -2245,36 +2260,19 @@ void
 json_open_stream (json_stream *json, FILE * stream)
 {
   init (json);
-  json->source.get = stream_get;
-  json->source.peek = stream_peek;
+  json->source.tag = JSON_SOURCE_STREAM;
   json->source.source.stream.stream = stream;
-}
-
-static int
-user_get (struct json_source *json)
-{
-  int c = json->source.user.get (json->source.user.ptr);
-  if (c != EOF)
-    json->position++;
-  return c;
-}
-
-static int
-user_peek (struct json_source *json)
-{
-  return json->source.user.peek (json->source.user.ptr);
 }
 
 void
 json_open_user (json_stream *json,
                 json_user_io get,
                 json_user_io peek,
-                void *user)
+                void *data)
 {
   init (json);
-  json->source.get = user_get;
-  json->source.peek = user_peek;
-  json->source.source.user.ptr = user;
+  json->source.tag = JSON_SOURCE_USER;
+  json->source.source.user.data = data;
   json->source.source.user.get = get;
   json->source.source.user.peek = peek;
 }
