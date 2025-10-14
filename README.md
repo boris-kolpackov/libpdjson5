@@ -125,16 +125,19 @@ at least one newline.
 ```c
 enum pdjson_type e = pdjson_next(json);
 
-if (e == PDJSON_DONE) {
+if (e == PDJSON_DONE)
+{
     int c = '\0';
-    while (pdjson_isspace(c = pdjson_source_peek(json))) {
+    while (pdjson_isspace(c = pdjson_source_peek(json)))
+    {
         pdjson_source_get(json);
         if (c == '\n')
             break;
     }
 
-    if (c != '\n' && c != EOF) {
-        /* error */
+    if (c != '\n' && c != EOF)
+    {
+        // error
     }
 
     pdjson_reset(json);

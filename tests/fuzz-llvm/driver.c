@@ -6,9 +6,9 @@
 #undef NDEBUG
 #include <assert.h>
 
-/* Parse the input text in the specified mode returning true if it is valid
-   and false otherwise. */
-
+// Parse the input text in the specified mode returning true if it is valid
+// and false otherwise.
+//
 static bool
 parse (const void *data, size_t size,
        enum pdjson_language language,
@@ -28,10 +28,11 @@ parse (const void *data, size_t size,
     if (streaming && t == PDJSON_DONE)
     {
       pdjson_reset (json);
-      t = pdjson_next (json); /* PDJSON_DONE if that was the last object. */
+      t = pdjson_next (json); // PDJSON_DONE if that was the last object.
     }
 
-    /* Let's get a warning if any new values are added. */
+    // Let's get a warning if any new values are added.
+    //
     size_t n;
     switch (t)
     {
