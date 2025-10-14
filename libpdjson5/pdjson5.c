@@ -133,10 +133,8 @@ is_legal_utf8 (const unsigned char *bytes, size_t length)
 }
 
 
-// Note that we reasonably assume that if peek() did not fail, then the
-// subsequent get() won't either. Likewise, if peek() did fail, then we
-// assume the subsequent get() will return an error as well. Finally, we
-// assume we can call failed peek() again with consistent results.
+// See documentation for struct json_user_io on reasonable assumptions around
+// the io failure semantics.
 //
 // Checking for the io error after every call to peek()/get() is quite tedious
 // and slow while io errors being fairly unlikely. As a result, we often use
@@ -173,7 +171,13 @@ source_peek (json_stream *json)
     }
   case JSON_SOURCE_USER:
     {
-      int c = source->source.user.peek (source->source.user.data);
+      int c = source->source.user.io.peek (source->source.user.data);
+
+      if (c == EOF                             &&
+          source->source.user.io.error != NULL &&
+          source->source.user.io.error (source->source.user.data))
+        break;
+
       return c;
     }
   case JSON_SOURCE_STREAM:
@@ -210,10 +214,13 @@ source_get (json_stream *json)
     }
   case JSON_SOURCE_USER:
     {
-      int c = source->source.user.get (source->source.user.data);
+      int c = source->source.user.io.get (source->source.user.data);
 
       if (c != EOF)
         source->position++;
+      else if (source->source.user.io.error != NULL &&
+               source->source.user.io.error (source->source.user.data))
+        break;
 
       return c;
     }
@@ -2342,7 +2349,7 @@ json_open_string (json_stream *json, const char *string)
 }
 
 void
-json_open_stream (json_stream *json, FILE * stream)
+json_open_stream (json_stream *json, FILE *stream)
 {
   init (json);
   json->source.tag = JSON_SOURCE_STREAM;
@@ -2350,20 +2357,16 @@ json_open_stream (json_stream *json, FILE * stream)
 }
 
 void
-json_open_user (json_stream *json,
-                json_user_io get,
-                json_user_io peek,
-                void *data)
+json_open_user (json_stream *json, const json_user_io *io, void *data)
 {
   init (json);
   json->source.tag = JSON_SOURCE_USER;
   json->source.source.user.data = data;
-  json->source.source.user.get = get;
-  json->source.source.user.peek = peek;
+  json->source.source.user.io = *io;
 }
 
 void
-json_set_allocator (json_stream *json, json_allocator *a)
+json_set_allocator (json_stream *json, const json_allocator *a)
 {
   json->alloc = *a;
 }
