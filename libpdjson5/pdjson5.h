@@ -26,36 +26,36 @@ extern "C"
 
 // Parsing event type.
 //
-enum json_type
+enum pdjson_type
 {
-  JSON_ERROR = 1,
-  JSON_DONE,
-  JSON_OBJECT,
-  JSON_OBJECT_END,
-  JSON_ARRAY,
-  JSON_ARRAY_END,
-  JSON_NAME,       // Object member name.
-  JSON_STRING,
-  JSON_NUMBER,
-  JSON_TRUE,
-  JSON_FALSE,
-  JSON_NULL
+  PDJSON_ERROR = 1,
+  PDJSON_DONE,
+  PDJSON_OBJECT,
+  PDJSON_OBJECT_END,
+  PDJSON_ARRAY,
+  PDJSON_ARRAY_END,
+  PDJSON_NAME,       // Object member name.
+  PDJSON_STRING,
+  PDJSON_NUMBER,
+  PDJSON_TRUE,
+  PDJSON_FALSE,
+  PDJSON_NULL
 };
 
-// Parsing event subtypes for the JSON_ERROR event.
+// Parsing event subtypes for the PDJSON_ERROR event.
 //
-enum json_error_subtype
+enum pdjson_error_subtype
 {
-  JSON_ERROR_SYNTAX = 1,
-  JSON_ERROR_MEMORY,
-  JSON_ERROR_IO
+  PDJSON_ERROR_SYNTAX = 1,
+  PDJSON_ERROR_MEMORY,
+  PDJSON_ERROR_IO
 };
 
 // Custom allocator and io functions may throw provided the parser was
 // compiled with exceptions support (-fexceptions, etc). In this case, the
-// only valid operation on json_stream is to close it with json_close().
+// only valid operation on pdjson_stream is to close it with pdjson_close().
 //
-struct json_allocator
+struct pdjson_allocator
 {
   void *(*malloc) (size_t);
   void *(*realloc) (void *, size_t);
@@ -71,128 +71,129 @@ struct json_allocator
 // the subsequent get() will return an error as well. Finally, we assume we
 // can call failed peek() again with consistent results.
 //
-struct json_user_io
+struct pdjson_user_io
 {
   int (*peek) (void *user_data);
   int (*get) (void *user_data);
   bool (*error) (void *user_data);
 };
 
-typedef struct json_stream json_stream;
-typedef struct json_allocator json_allocator;
-typedef struct json_user_io json_user_io;
+typedef struct pdjson_stream pdjson_stream;
+typedef struct pdjson_allocator pdjson_allocator;
+typedef struct pdjson_user_io pdjson_user_io;
 
 LIBPDJSON5_SYMEXPORT void
-json_open_buffer (json_stream *json, const void *buffer, size_t size);
+pdjson_open_buffer (pdjson_stream *json, const void *buffer, size_t size);
 
 LIBPDJSON5_SYMEXPORT void
-json_open_string (json_stream *json, const char *string);
+pdjson_open_string (pdjson_stream *json, const char *string);
 
 LIBPDJSON5_SYMEXPORT void
-json_open_stream (json_stream *json, FILE *stream);
+pdjson_open_stream (pdjson_stream *json, FILE *stream);
 
 LIBPDJSON5_SYMEXPORT void
-json_open_user (json_stream *json,
-                const json_user_io *user_io,
-                void *user_data);
+pdjson_open_user (pdjson_stream *json,
+                  const pdjson_user_io *user_io,
+                  void *user_data);
 
 LIBPDJSON5_SYMEXPORT void
-json_close (json_stream *json);
+pdjson_close (pdjson_stream *json);
 
 LIBPDJSON5_SYMEXPORT void
-json_set_allocator (json_stream *json, const json_allocator *allocator);
+pdjson_set_allocator (pdjson_stream *json, const pdjson_allocator *allocator);
 
 LIBPDJSON5_SYMEXPORT void
-json_set_streaming (json_stream *json, bool mode);
+pdjson_set_streaming (pdjson_stream *json, bool mode);
 
-enum json_language
+enum pdjson_language
 {
-  JSON_LANGUAGE_JSON,   // Strict JSON.
-  JSON_LANGUAGE_JSON5,  // Strict JSON5
-  JSON_LANGUAGE_JSON5E, // Extended JSON5.
+  PDJSON_LANGUAGE_JSON,   // Strict JSON.
+  PDJSON_LANGUAGE_JSON5,  // Strict JSON5
+  PDJSON_LANGUAGE_JSON5E, // Extended JSON5.
 };
 
 LIBPDJSON5_SYMEXPORT void
-json_set_language (json_stream *json, enum json_language language);
+pdjson_set_language (pdjson_stream *json, enum pdjson_language language);
 
-LIBPDJSON5_SYMEXPORT enum json_type
-json_next (json_stream *json);
+LIBPDJSON5_SYMEXPORT enum pdjson_type
+pdjson_next (pdjson_stream *json);
 
 // Note that after peeking at the next even, all the accessor functions
-// (json_get_name/value(), json_get_line/column(), json_get_error(), etc),
-// return information about the newly peeked event, not the previously
-// consumed one.
+// (pdjson_get_*_subtype(), pdjson_get_name/value(), pdjson_get_line/column(),
+// pdjson_get_error(), etc), return information about the newly peeked event,
+// not the previously consumed one.
 //
-LIBPDJSON5_SYMEXPORT enum json_type
-json_peek (json_stream *json);
+LIBPDJSON5_SYMEXPORT enum pdjson_type
+pdjson_peek (pdjson_stream *json);
 
 LIBPDJSON5_SYMEXPORT void
-json_reset (json_stream *json);
+pdjson_reset (pdjson_stream *json);
 
 // Get subtype for certain events.
 //
-LIBPDJSON5_SYMEXPORT enum json_error_subtype
-json_get_error_subtype (json_stream *json);
+LIBPDJSON5_SYMEXPORT enum pdjson_error_subtype
+pdjson_get_error_subtype (pdjson_stream *json);
 
-// Return the object member name after JSON_NAME event.
+// Return the object member name after PDJSON_NAME event.
 //
 // Note that the returned size counts the trailing `\0`.
 //
 LIBPDJSON5_SYMEXPORT const char *
-json_get_name (json_stream *json, size_t *size);
+pdjson_get_name (pdjson_stream *json, size_t *size);
 
-// Return the string or number value after the JSON_STRING or JSON_NUMBER
+// Return the string or number value after the PDJSON_STRING or PDJSON_NUMBER
 // events.
 //
 // Note that the returned size counts the trailing `\0`.
 //
 LIBPDJSON5_SYMEXPORT const char *
-json_get_value (json_stream *json, size_t *size);
+pdjson_get_value (pdjson_stream *json, size_t *size);
 
 // Skip over the next value, skipping over entire arrays and objects. Return
 // the skipped value.
 //
-LIBPDJSON5_SYMEXPORT enum json_type
-json_skip (json_stream *json);
+LIBPDJSON5_SYMEXPORT enum pdjson_type
+pdjson_skip (pdjson_stream *json);
 
-// Skip until the specified event type or encountering JSON_ERROR or
-// JSON_DONE. Return the encountered event.
+// Skip until the specified event type or encountering PDJSON_ERROR or
+// PDJSON_DONE. Return the encountered event.
 //
-LIBPDJSON5_SYMEXPORT enum json_type
-json_skip_until (json_stream *json, enum json_type type);
+LIBPDJSON5_SYMEXPORT enum pdjson_type
+pdjson_skip_until (pdjson_stream *json, enum pdjson_type type);
 
 LIBPDJSON5_SYMEXPORT uint64_t
-json_get_line (json_stream *json);
+pdjson_get_line (pdjson_stream *json);
 
 LIBPDJSON5_SYMEXPORT uint64_t
-json_get_column (json_stream *json);
+pdjson_get_column (pdjson_stream *json);
 
 LIBPDJSON5_SYMEXPORT uint64_t
-json_get_position (json_stream *json);
+pdjson_get_position (pdjson_stream *json);
 
 LIBPDJSON5_SYMEXPORT size_t
-json_get_depth (json_stream *json);
+pdjson_get_depth (pdjson_stream *json);
 
-// Return the current parsing context, that is, JSON_OBJECT if we are inside
-// an object, JSON_ARRAY if we are inside an array, and JSON_DONE if we are
-// not yet/no longer in either.
+// Return the current parsing context, that is, PDJSON_OBJECT if we are inside
+// an object, PDJSON_ARRAY if we are inside an array, and PDJSON_DONE if we
+// are not yet/no longer in either, or PDJSON_ERROR if the parser is in the
+// error state.
 //
-// Additionally, for the first two cases, also return the number of parsing
-// events that have already been observed at this level with json_next/peek().
-// In particular, inside an object, an odd number would indicate that we just
-// observed the JSON_NAME event.
+// Additionally, for the first two cases, return the number of parsing events
+// that have already been observed at this level with pdjson_next/peek(). In
+// particular, inside an object, an odd number would indicate that we just
+// observed the PDJSON_NAME event.
 //
-LIBPDJSON5_SYMEXPORT enum json_type
-json_get_context (json_stream *json, uint64_t *count);
+LIBPDJSON5_SYMEXPORT enum pdjson_type
+pdjson_get_context (pdjson_stream *json, uint64_t *count);
 
 // Return error message if the previously peeked at or consumed even was
-// JSON_ERROR and NULL otherwise. Note that the message is UTF-8 encoded.
+// PDJSON_ERROR and NULL otherwise. Note that the message is UTF-8 encoded.
 //
-LIBPDJSON5_SYMEXPORT const char *json_get_error (json_stream *json);
+LIBPDJSON5_SYMEXPORT const char *pdjson_get_error (pdjson_stream *json);
 
-LIBPDJSON5_SYMEXPORT int json_source_get (json_stream *json);
-LIBPDJSON5_SYMEXPORT int json_source_peek (json_stream *json);
-LIBPDJSON5_SYMEXPORT bool json_source_error (json_stream *json);
+LIBPDJSON5_SYMEXPORT int pdjson_source_get (pdjson_stream *json);
+LIBPDJSON5_SYMEXPORT int pdjson_source_peek (pdjson_stream *json);
+LIBPDJSON5_SYMEXPORT bool pdjson_source_error (pdjson_stream *json);
 
 
 // Note that this function only examines the first byte of a potentially
@@ -200,9 +201,9 @@ LIBPDJSON5_SYMEXPORT bool json_source_error (json_stream *json);
 // encoded single bytes. Those are the only valid ones for JSON but not for
 // JSON5. If you need to detect multi-byte whitespaces, then you will either
 // need to do this yourself (and diagnose any non-whitespaces as appropriate)
-// or use json_skip_if_space() below.
+// or use pdjson_skip_if_space() below.
 //
-LIBPDJSON5_SYMEXPORT bool json_is_space (json_stream *json, int byte);
+LIBPDJSON5_SYMEXPORT bool pdjson_is_space (pdjson_stream *json, int byte);
 
 // Given a peeked at byte, consume it and any following bytes that are part of
 // the same multi-byte UTF-8 sequence if it is a whitespace and return 1. If
@@ -226,21 +227,21 @@ LIBPDJSON5_SYMEXPORT bool json_is_space (json_stream *json, int byte);
 // source get/peek interface operating on bytes, not codepoints.
 //
 LIBPDJSON5_SYMEXPORT int
-json_skip_if_space (json_stream *json, int byte, uint32_t *codepoint);
+pdjson_skip_if_space (pdjson_stream *json, int byte, uint32_t *codepoint);
 
 // Implementation details.
 //
 
-enum json_source_tag
+enum pdjson_source_tag
 {
-  JSON_SOURCE_BUFFER = 1,
-  JSON_SOURCE_USER,
-  JSON_SOURCE_STREAM
+  PDJSON_SOURCE_BUFFER = 1,
+  PDJSON_SOURCE_USER,
+  PDJSON_SOURCE_STREAM
 };
 
-struct json_source
+struct pdjson_source
 {
-  enum json_source_tag tag;
+  enum pdjson_source_tag tag;
   uint64_t position;
   union
   {
@@ -258,12 +259,12 @@ struct json_source
     struct
     {
       void *data;
-      json_user_io io;
+      pdjson_user_io io;
     } user;
   } source;
 };
 
-struct json_stream
+struct pdjson_stream
 {
   uint64_t lineno;
 
@@ -278,8 +279,8 @@ struct json_stream
    * will be the difference between the current position and linepos. Of
    * course there could also be multi-byte UTF-8 sequences which we will
    * handle by keeping an adjustment (lineadj) -- the number of continuation
-   * bytes encountered on this line so far. Finally, for json_source_get() we
-   * also have to keep the number of remaining continuation bytes in the
+   * bytes encountered on this line so far. Finally, for pdjson_source_get()
+   * we also have to keep the number of remaining continuation bytes in the
    * current multi-byte UTF-8 sequence (linecon).
    *
    * This is not the end of the story, however: with only the just described
@@ -287,7 +288,7 @@ struct json_stream
    * read which is not what we want when returning potentially multi-
    * character value events (string, number, etc); in these cases we want to
    * return the column of the first character (note that if the value itself
-   * is invalid and we are returning JSON_ERROR, we still want the current
+   * is invalid and we are returning PDJSON_ERROR, we still want the current
    * column). So to handle this we will cache the start column (colno) for
    * such events.
    */
@@ -299,17 +300,17 @@ struct json_stream
   uint64_t start_lineno;
   uint64_t start_colno;
 
-  struct json_stack *stack;
+  struct pdjson_stack *stack;
   size_t stack_top;
   size_t stack_size;
   uint32_t flags;
 
-  unsigned int subtype; // One of enum json_*_subtype.
-  enum json_type peek;
+  unsigned int subtype; // One of enum pdjson_*_subtype.
+  enum pdjson_type peek;
 
   struct
   {
-    enum json_type type;
+    enum pdjson_type type;
     unsigned int subtype;
     uint64_t lineno;
     uint64_t colno;
@@ -324,8 +325,8 @@ struct json_stream
 
   uint64_t ntokens; // Number of values/names read, recursively.
 
-  struct json_source source;
-  struct json_allocator alloc;
+  struct pdjson_source source;
+  struct pdjson_allocator alloc;
 
   char error_message[128];
   char utf8_char[6]; // Up to 4 for UTF-8, 2 for quotes, one for \0.

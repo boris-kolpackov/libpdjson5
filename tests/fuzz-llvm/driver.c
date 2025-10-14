@@ -11,63 +11,63 @@
 
 static bool
 parse (const void *data, size_t size,
-       enum json_language language,
+       enum pdjson_language language,
        bool streaming)
 {
-  struct json_stream json[1];
-  enum json_type t = JSON_DONE;
+  struct pdjson_stream json[1];
+  enum pdjson_type t = PDJSON_DONE;
 
-  json_open_buffer (json, data, size);
-  json_set_streaming (json, streaming);
-  json_set_language (json, language);
+  pdjson_open_buffer (json, data, size);
+  pdjson_set_streaming (json, streaming);
+  pdjson_set_language (json, language);
 
   do
   {
-    t = json_next (json);
+    t = pdjson_next (json);
 
-    if (streaming && t == JSON_DONE)
+    if (streaming && t == PDJSON_DONE)
     {
-      json_reset (json);
-      t = json_next (json); /* JSON_DONE if that was the last object. */
+      pdjson_reset (json);
+      t = pdjson_next (json); /* PDJSON_DONE if that was the last object. */
     }
 
     /* Let's get a warning if any new values are added. */
     size_t n;
     switch (t)
     {
-    case JSON_ERROR:
-      assert (json_get_error_subtype (json) == JSON_ERROR_SYNTAX &&
-              json_get_error (json) != NULL);
+    case PDJSON_ERROR:
+      assert (pdjson_get_error_subtype (json) == PDJSON_ERROR_SYNTAX &&
+              pdjson_get_error (json) != NULL);
       break;
-    case JSON_NAME:
-      assert (json_get_name (json, NULL) != NULL);
+    case PDJSON_NAME:
+      assert (pdjson_get_name (json, NULL) != NULL);
       break;
-    case JSON_STRING:
-      assert (json_get_value (json, NULL) != NULL);
+    case PDJSON_STRING:
+      assert (pdjson_get_value (json, NULL) != NULL);
       break;
-    case JSON_NUMBER:
-      assert (json_get_value (json, &n) != NULL && n != 0);
+    case PDJSON_NUMBER:
+      assert (pdjson_get_value (json, &n) != NULL && n != 0);
       break;
-    case JSON_OBJECT:
-      assert (json_get_context (json, NULL) == JSON_OBJECT);
+    case PDJSON_OBJECT:
+      assert (pdjson_get_context (json, NULL) == PDJSON_OBJECT);
       break;
-    case JSON_ARRAY:
-      assert (json_get_context (json, NULL) == JSON_ARRAY);
+    case PDJSON_ARRAY:
+      assert (pdjson_get_context (json, NULL) == PDJSON_ARRAY);
       break;
-    case JSON_DONE:
-    case JSON_TRUE:
-    case JSON_FALSE:
-    case JSON_NULL:
-    case JSON_OBJECT_END:
-    case JSON_ARRAY_END:
+    case PDJSON_DONE:
+    case PDJSON_TRUE:
+    case PDJSON_FALSE:
+    case PDJSON_NULL:
+    case PDJSON_OBJECT_END:
+    case PDJSON_ARRAY_END:
       break;
     }
   }
-  while (t != JSON_DONE && t != JSON_ERROR);
+  while (t != PDJSON_DONE && t != PDJSON_ERROR);
 
-  json_close (json);
+  pdjson_close (json);
 
-  return t != JSON_ERROR;
+  return t != PDJSON_ERROR;
 }
 
 int
@@ -80,12 +80,12 @@ LLVMFuzzerTestOneInput (const uint8_t* data, size_t size)
   // different modes may apply different parsing logic to the same input
   // (implied object handling in JSON5E is a good example).
   //
-  parse (data, size, JSON_LANGUAGE_JSON,   false);
-  parse (data, size, JSON_LANGUAGE_JSON,   true);
-  parse (data, size, JSON_LANGUAGE_JSON5,  false);
-  parse (data, size, JSON_LANGUAGE_JSON5,  true);
-  parse (data, size, JSON_LANGUAGE_JSON5E, false);
-  parse (data, size, JSON_LANGUAGE_JSON5E, true);
+  parse (data, size, PDJSON_LANGUAGE_JSON,   false);
+  parse (data, size, PDJSON_LANGUAGE_JSON,   true);
+  parse (data, size, PDJSON_LANGUAGE_JSON5,  false);
+  parse (data, size, PDJSON_LANGUAGE_JSON5,  true);
+  parse (data, size, PDJSON_LANGUAGE_JSON5E, false);
+  parse (data, size, PDJSON_LANGUAGE_JSON5E, true);
 
   return 0;
 }

@@ -28,7 +28,7 @@ main (int argc, char *argv[])
   bool streaming = false;
   bool separator = false;
   uint64_t io_error = (uint64_t)-1;
-  enum json_language language = JSON_LANGUAGE_JSON;
+  enum pdjson_language language = PDJSON_LANGUAGE_JSON;
 
   for (int i = 1; i < argc; ++i)
   {
@@ -52,9 +52,9 @@ main (int argc, char *argv[])
       return 1;
     }
     else if (strcmp (a, "--json5") == 0)
-      language = JSON_LANGUAGE_JSON5;
+      language = PDJSON_LANGUAGE_JSON5;
     else if (strcmp (a, "--json5e") == 0)
-      language = JSON_LANGUAGE_JSON5E;
+      language = PDJSON_LANGUAGE_JSON5E;
     else
     {
       fprintf (stderr, "error: unexpected argument '%s'\n", a);
@@ -68,19 +68,19 @@ main (int argc, char *argv[])
     return 1;
   }
 
-  json_stream json;
-  json_open_stream (&json, stdin);
-  json_set_streaming (&json, streaming);
-  json_set_language (&json, language);
+  pdjson_stream json;
+  pdjson_open_stream (&json, stdin);
+  pdjson_set_streaming (&json, streaming);
+  pdjson_set_language (&json, language);
 
   size_t ind = 0; // Indentation.
 
-  enum json_type t;
+  enum pdjson_type t;
   for (bool first = true;;)
   {
     if (io_error != (uint64_t)-1)
     {
-      uint64_t p = json_get_position (&json);
+      uint64_t p = pdjson_get_position (&json);
 
       // Note that we don't observe every position since some of them are
       // passed over inside the parser. This limits the failure points we can
@@ -89,22 +89,22 @@ main (int argc, char *argv[])
       if (p >= io_error)
       {
         printf ("%3" PRIu64 ",%3" PRIu64 ": <io error at %" PRIu64 ">\n",
-                json_get_line (&json),
-                json_get_column (&json),
+                pdjson_get_line (&json),
+                pdjson_get_column (&json),
                 p);
 
         fclose (stdin);
       }
     }
 
-    t = json_next (&json);
+    t = pdjson_next (&json);
 
-    if (t == JSON_ERROR)
+    if (t == PDJSON_ERROR)
       break;
 
-    if (t == JSON_DONE)
+    if (t == PDJSON_DONE)
     {
-      // Second JSON_DONE in the streamig mode is the end of multi-value.
+      // Second PDJSON_DONE in the streamig mode is the end of multi-value.
       //
       if (!streaming || first)
         break;
@@ -113,25 +113,27 @@ main (int argc, char *argv[])
       {
         uint32_t cp;
         int r;
-        while ((r = json_skip_if_space (&json, json_source_peek (&json), &cp)))
+        while ((r = pdjson_skip_if_space (&json,
+                                          pdjson_source_peek (&json),
+                                          &cp)))
         {
           if (r == -1)
           {
-            t = JSON_ERROR;
+            t = PDJSON_ERROR;
             break;
           }
 
           printf ("%3" PRIu64 ",%3" PRIu64 ": <0x%06" PRIx32 ">\n",
-                  json_get_line (&json),
-                  json_get_column (&json),
+                  pdjson_get_line (&json),
+                  pdjson_get_column (&json),
                   cp);
         }
       }
 
-      if (t == JSON_ERROR)
+      if (t == PDJSON_ERROR)
         break;
 
-      json_reset (&json);
+      pdjson_reset (&json);
       first = true;
       continue;
     }
@@ -140,91 +142,91 @@ main (int argc, char *argv[])
       first = false;
 
     printf ("%3" PRIu64 ",%3" PRIu64 ": ",
-            json_get_line (&json),
-            json_get_column (&json));
+            pdjson_get_line (&json),
+            pdjson_get_column (&json));
 
-    if (t == JSON_ARRAY_END || t == JSON_OBJECT_END)
+    if (t == PDJSON_ARRAY_END || t == PDJSON_OBJECT_END)
       ind--;
 
     for (size_t i = 0; i != ind; ++i)
       fputs ("  ", stdout);
 
-    if (t == JSON_ARRAY || t == JSON_OBJECT)
+    if (t == PDJSON_ARRAY || t == PDJSON_OBJECT)
       ind++;
 
     switch (t)
     {
-    case JSON_NULL:
+    case PDJSON_NULL:
       printf ("<null>\n");
       break;
-    case JSON_TRUE:
+    case PDJSON_TRUE:
       printf ("<true>\n");
       break;
-    case JSON_FALSE:
+    case PDJSON_FALSE:
       printf ("<false>\n");
       break;
-    case JSON_NAME:
+    case PDJSON_NAME:
       {
         uint64_t n;
-        assert (json_get_context (&json, &n) == JSON_OBJECT && n % 2 != 0);
+        assert (pdjson_get_context (&json, &n) == PDJSON_OBJECT && n % 2 != 0);
       }
       // Fall through.
-    case JSON_STRING:
-    case JSON_NUMBER:
+    case PDJSON_STRING:
+    case PDJSON_NUMBER:
       {
         size_t n;
-        const char* s = (t == JSON_NAME
-                         ? json_get_name (&json, &n)
-                         : json_get_value (&json, &n));
+        const char* s = (t == PDJSON_NAME
+                         ? pdjson_get_name (&json, &n)
+                         : pdjson_get_value (&json, &n));
         assert (strlen (s) + 1 == n);
 
         // Print numbers and object member names without quoted.
         //
-        printf (t == JSON_STRING ? "\"%s\"\n" : "%s\n", s);
+        printf (t == PDJSON_STRING ? "\"%s\"\n" : "%s\n", s);
         break;
       }
-    case JSON_ARRAY:
-      assert (json_get_context (&json, NULL) == JSON_ARRAY);
+    case PDJSON_ARRAY:
+      assert (pdjson_get_context (&json, NULL) == PDJSON_ARRAY);
       printf ("[\n");
       break;
-    case JSON_ARRAY_END:
+    case PDJSON_ARRAY_END:
       printf ("]\n");
       break;
-    case JSON_OBJECT:
-      assert (json_get_context (&json, NULL) == JSON_OBJECT);
+    case PDJSON_OBJECT:
+      assert (pdjson_get_context (&json, NULL) == PDJSON_OBJECT);
       printf ("{\n");
       break;
-    case JSON_OBJECT_END:
+    case PDJSON_OBJECT_END:
       printf ("}\n");
       break;
-    case JSON_ERROR:
-    case JSON_DONE:
+    case PDJSON_ERROR:
+    case PDJSON_DONE:
       assert (false);
     }
   }
 
   int r = 0;
-  if (t == JSON_ERROR)
+  if (t == PDJSON_ERROR)
   {
     const char *et;
-    switch (json_get_error_subtype (&json))
+    switch (pdjson_get_error_subtype (&json))
     {
-    case JSON_ERROR_SYNTAX: et = "";         break;
-    case JSON_ERROR_MEMORY: et = " (memory)"; break;
-    case JSON_ERROR_IO:     et = " (io)";     break;
+    case PDJSON_ERROR_SYNTAX: et = "";         break;
+    case PDJSON_ERROR_MEMORY: et = " (memory)"; break;
+    case PDJSON_ERROR_IO:     et = " (io)";     break;
     default: assert (false);
     }
 
     fprintf (stderr,
              "<stdin>:%" PRIu64 ":%" PRIu64 ": error: %s%s\n",
-             json_get_line (&json),
-             json_get_column (&json),
-             json_get_error (&json),
+             pdjson_get_line (&json),
+             pdjson_get_column (&json),
+             pdjson_get_error (&json),
              et);
     r = 1;
   }
 
-  json_close(&json);
+  pdjson_close(&json);
 
   return r;
 }
