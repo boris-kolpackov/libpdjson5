@@ -107,13 +107,13 @@ is_legal_utf8 (const unsigned char *bytes, size_t length)
   {
   default:
     return false;
-    /* Everything else falls through when true. */
+    // Everything else falls through when true.
   case 4:
     if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false;
-    /* FALLTHRU */
+    // Fall through.
   case 3:
     if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false;
-    /* FALLTHRU */
+    // Fall through.
   case 2:
     a = (*--srcptr);
     switch (*bytes)
@@ -134,7 +134,7 @@ is_legal_utf8 (const unsigned char *bytes, size_t length)
       if (a < 0x80 || a > 0xBF) return false;
       break;
     }
-    /* FALLTHRU */
+    // Fall through.
   case 1:
     if (*bytes >= 0x80 && *bytes < 0xC2)
       return false;
@@ -352,7 +352,7 @@ diag_char_string (pdjson_stream *json, const char* u)
 static const char *
 diag_codepoint (pdjson_stream *json, uint32_t c)
 {
-  if (c == (uint32_t)-1 /*EOF*/)
+  if (c == (uint32_t)-1 /* EOF */)
     return diag_char (json, EOF);
 
   if (c < 0x80)
@@ -393,7 +393,8 @@ diag_codepoint (pdjson_stream *json, uint32_t c)
   return s;
 }
 
-/* See also LIBPDJSON5_STACK_MAX below. */
+// See also LIBPDJSON5_STACK_MAX below.
+//
 #ifndef LIBPDJSON5_STACK_INC
 #  define LIBPDJSON5_STACK_INC 4
 #endif
@@ -722,9 +723,9 @@ read_unicode (pdjson_stream *json)
 
   if (cp >= 0xD800 && cp <= 0xDBFF)
   {
-    /* This is the high portion of a surrogate pair; we need to read the
-     * lower portion to get the codepoint
-     */
+    // This is the high portion of a surrogate pair; we need to read the lower
+    // portion to get the codepoint
+    //
     h = cp;
 
     int c = source_get (json);
@@ -1210,7 +1211,8 @@ read_number (pdjson_stream *json, int c)
       return PDJSON_ERROR;
   }
 
-  /* Check for exponent. */
+  // Check for exponent.
+  //
   c = source_peek (json);
   if (c == 'e' || c == 'E')
   {
@@ -1778,11 +1780,12 @@ pdjson_next (pdjson_stream *json)
 
   if (json->ntokens > 0 && json->stack_top == (size_t)-1)
   {
-    /* In the streaming mode leave any trailing whitespaces in the stream.
-     * This allows the user to validate any desired separation between
-     * values (such as newlines) using pdjson_source_get/peek() with any
-     * remaining whitespaces ignored as leading when we parse the next
-     * value. */
+    // In the streaming mode leave any trailing whitespaces in the stream.
+    // This allows the user to validate any desired separation between
+    // values (such as newlines) using pdjson_source_get/peek() with any
+    // remaining whitespaces ignored as leading when we parse the next
+    // value.
+    //
     if (!(json->flags & FLAG_STREAMING))
     {
       // If FLAG_IMPLIED_END is set here, then it means we have already seen
@@ -2333,7 +2336,8 @@ pdjson_source_get (pdjson_stream *json)
   int c = source_get (json); // IOERROR: return as EOF to caller.
   if (json->linecon != 0)
   {
-    /* Expecting a continuation byte within a multi-byte UTF-8 sequence. */
+    // Expecting a continuation byte within a multi-byte UTF-8 sequence.
+    //
     if (c != EOF)
     {
       json->linecon--;
@@ -2342,7 +2346,7 @@ pdjson_source_get (pdjson_stream *json)
   }
   else if (c == '\n')
     newline (json);
-  else if (c >= 0xC2 && c <= 0xF4) /* First in multi-byte UTF-8 sequence. */
+  else if (c >= 0xC2 && c <= 0xF4) // First in multi-byte UTF-8 sequence.
     json->linecon = utf8_seq_length (c) - 1;
 
   return c;
