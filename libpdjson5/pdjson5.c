@@ -420,9 +420,13 @@ push (pdjson_stream *json, enum pdjson_type type)
 
   if (new_stack_top >= json->stack_size)
   {
-    size_t size = (json->stack_size + LIBPDJSON5_STACK_INC) * sizeof (*json->stack);
+    size_t size = (json->stack_size + LIBPDJSON5_STACK_INC) *
+      sizeof (struct pdjson_stack);
+
     struct pdjson_stack *stack =
-      (struct pdjson_stack *)json->alloc.realloc (json->stack, size); // THROW
+      (struct pdjson_stack *)json->alloc.realloc (
+        json->stack, size, json->alloc_data); // THROW
+
     if (stack == NULL)
     {
       mem_error (json, "out of memory");
@@ -455,6 +459,28 @@ pop (pdjson_stream *json, enum pdjson_type type)
   return type;
 }
 
+static void *
+malloc_thunk (size_t size, void *user_data)
+{
+  (void)user_data;
+  return malloc (size);
+}
+
+static void *
+realloc_thunk (void *p, size_t size, void *user_data)
+{
+  (void)user_data;
+  return realloc (p, size);
+}
+
+static void
+free_thunk (void *p, size_t size, void *user_data)
+{
+  (void)size;
+  (void)user_data;
+  free (p);
+}
+
 static void
 init (pdjson_stream *json)
 {
@@ -481,9 +507,10 @@ init (pdjson_stream *json)
   json->data.string_fill = 0;
   json->source.position = 0;
 
-  json->alloc.malloc = malloc;
-  json->alloc.realloc = realloc;
-  json->alloc.free = free;
+  json->alloc.malloc = malloc_thunk;
+  json->alloc.realloc = realloc_thunk;
+  json->alloc.free = free_thunk;
+  json->alloc_data = NULL;
 }
 
 static bool
@@ -492,7 +519,8 @@ pushchar (pdjson_stream *json, int c)
   if (json->data.string_fill == json->data.string_size)
   {
     size_t size = json->data.string_size * 2;
-    char *buffer = (char *)json->alloc.realloc (json->data.string, size); // THROW
+    char *buffer = (char *)json->alloc.realloc (
+      json->data.string, size, json->alloc_data); // THROW
     if (buffer == NULL)
     {
       mem_error (json, "out of memory");
@@ -599,7 +627,8 @@ static bool
 init_string (pdjson_stream *json)
 {
   json->data.string_size = 256; // @@ Make configurable?
-  json->data.string = (char *)json->alloc.malloc (json->data.string_size); // THROW
+  json->data.string = (char *)json->alloc.malloc (
+    json->data.string_size, json->alloc_data); // THROW
   if (json->data.string == NULL)
   {
     mem_error (json, "out of memory");
@@ -2399,9 +2428,12 @@ pdjson_open_user (pdjson_stream *json, const pdjson_user_io *io, void *data)
 }
 
 void
-pdjson_set_allocator (pdjson_stream *json, const pdjson_allocator *a)
+pdjson_set_allocator (pdjson_stream *json,
+                      const pdjson_allocator *alloc,
+                      void *data)
 {
-  json->alloc = *a;
+  json->alloc = *alloc;
+  json->alloc_data = data;
 }
 
 void
@@ -2434,6 +2466,11 @@ pdjson_set_language (pdjson_stream *json, enum pdjson_language language)
 void
 pdjson_close (pdjson_stream *json)
 {
-  json->alloc.free (json->stack);
-  json->alloc.free (json->data.string);
+  json->alloc.free (json->stack,
+                    json->stack_size * sizeof (struct pdjson_stack),
+                    json->alloc_data);
+
+  json->alloc.free (json->data.string,
+                    json->data.string_size,
+                    json->alloc_data);
 }

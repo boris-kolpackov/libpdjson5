@@ -57,9 +57,9 @@ enum pdjson_error_subtype
 //
 struct pdjson_allocator
 {
-  void *(*malloc) (size_t);
-  void *(*realloc) (void *, size_t);
-  void (*free) (void *);
+  void *(*malloc) (size_t, void *user_data);
+  void *(*realloc) (void *, size_t, void *user_data);
+  void (*free) (void *, size_t, void *user_data);
 };
 
 // The peek() and get() functions are expected to return OEF on error, which
@@ -100,7 +100,9 @@ LIBPDJSON5_SYMEXPORT void
 pdjson_close (pdjson_stream *json);
 
 LIBPDJSON5_SYMEXPORT void
-pdjson_set_allocator (pdjson_stream *json, const pdjson_allocator *allocator);
+pdjson_set_allocator (pdjson_stream *json,
+                      const pdjson_allocator *allocator,
+                      void *user_data);
 
 LIBPDJSON5_SYMEXPORT void
 pdjson_set_streaming (pdjson_stream *json, bool mode);
@@ -328,6 +330,7 @@ struct pdjson_stream
 
   struct pdjson_source source;
   struct pdjson_allocator alloc;
+  void *alloc_data;
 
   char error_message[128];
   char utf8_char[6]; // Up to 4 for UTF-8, 2 for quotes, one for \0.
