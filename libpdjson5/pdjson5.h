@@ -164,6 +164,8 @@ LIBPDJSON5_SYMEXPORT const char *json_get_error (json_stream *json);
 
 LIBPDJSON5_SYMEXPORT int json_source_get (json_stream *json);
 LIBPDJSON5_SYMEXPORT int json_source_peek (json_stream *json);
+LIBPDJSON5_SYMEXPORT bool json_source_error (json_stream *json);
+
 
 // Note that this function only examines the first byte of a potentially
 // multi-byte UTF-8 sequence. As result, it only returns true for whitespaces
