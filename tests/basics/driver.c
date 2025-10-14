@@ -206,11 +206,21 @@ main (int argc, char *argv[])
   int r = 0;
   if (t == JSON_ERROR)
   {
+    const char *et;
+    switch (json_get_error_subtype (&json))
+    {
+    case JSON_ERROR_SYNTAX: et = "";         break;
+    case JSON_ERROR_MEMORY: et = " (memory)"; break;
+    case JSON_ERROR_IO:     et = " (io)";     break;
+    default: assert (false);
+    }
+
     fprintf (stderr,
-             "<stdin>:%" PRIu64 ":%" PRIu64 ": error: %s\n",
+             "<stdin>:%" PRIu64 ":%" PRIu64 ": error: %s%s\n",
              json_get_line (&json),
              json_get_column (&json),
-             json_get_error (&json));
+             json_get_error (&json),
+             et);
     r = 1;
   }
 
