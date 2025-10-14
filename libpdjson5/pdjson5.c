@@ -74,49 +74,49 @@ utf8_seq_length (char byte)
   }
 }
 
-static int
+static bool
 is_legal_utf8 (const unsigned char *bytes, size_t length)
 {
   if (0 == bytes || 0 == length)
-    return 0;
+    return false;
 
   unsigned char a;
   const unsigned char* srcptr = bytes + length;
   switch (length)
   {
   default:
-    return 0;
+    return false;
     /* Everything else falls through when true. */
   case 4:
-    if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return 0;
+    if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false;
     /* FALLTHRU */
   case 3:
-    if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return 0;
+    if ((a = (*--srcptr)) < 0x80 || a > 0xBF) return false;
     /* FALLTHRU */
   case 2:
     a = (*--srcptr);
     switch (*bytes)
     {
     case 0xE0:
-      if (a < 0xA0 || a > 0xBF) return 0;
+      if (a < 0xA0 || a > 0xBF) return false;
       break;
     case 0xED:
-      if (a < 0x80 || a > 0x9F) return 0;
+      if (a < 0x80 || a > 0x9F) return false;
       break;
     case 0xF0:
-      if (a < 0x90 || a > 0xBF) return 0;
+      if (a < 0x90 || a > 0xBF) return false;
       break;
     case 0xF4:
-      if (a < 0x80 || a > 0x8F) return 0;
+      if (a < 0x80 || a > 0x8F) return false;
       break;
     default:
-      if (a < 0x80 || a > 0xBF) return 0;
+      if (a < 0x80 || a > 0xBF) return false;
       break;
     }
     /* FALLTHRU */
   case 1:
     if (*bytes >= 0x80 && *bytes < 0xC2)
-      return 0;
+      return false;
   }
   return *bytes <= 0xF4;
 }
@@ -402,7 +402,7 @@ init (json_stream *json)
   json->alloc.free = free;
 }
 
-static int
+static bool
 pushchar (json_stream *json, int c)
 {
   if (json->data.string_fill == json->data.string_size)
@@ -412,7 +412,7 @@ pushchar (json_stream *json, int c)
     if (buffer == NULL)
     {
       json_error (json, "%s", "out of memory");
-      return -1;
+      return false;
     }
 
     json->data.string_size = size;
@@ -421,7 +421,7 @@ pushchar (json_stream *json, int c)
 
   json->data.string[json->data.string_fill++] = c;
 
-  return 0;
+  return true;
 }
 
 // Match the remainder of input assuming the first character in pattern
@@ -446,14 +446,14 @@ is_match (json_stream *json,
 
     if (copy)
     {
-      if (pushchar (json, c) != 0)
+      if (!pushchar (json, c))
         return JSON_ERROR;
     }
   }
 
   if (copy)
   {
-    if (pushchar (json, '\0') != 0)
+    if (!pushchar (json, '\0'))
       return JSON_ERROR;
   }
 
@@ -511,7 +511,7 @@ is_match_string (json_stream *json,
   return type;
 }
 
-static int
+static bool
 init_string (json_stream *json)
 {
   json->data.string_size = 256; // @@ Make configurable?
@@ -519,12 +519,12 @@ init_string (json_stream *json)
   if (json->data.string == NULL)
   {
     json_error (json, "%s", "out of memory");
-    return -1;
+    return false;
   }
-  return 0;
+  return true;
 }
 
-static int
+static bool
 encode_utf8 (json_stream *json, uint32_t c)
 {
   if (c < 0x80)
@@ -533,35 +533,37 @@ encode_utf8 (json_stream *json, uint32_t c)
   }
   else if (c < 0x0800)
   {
-    return !((pushchar (json, (c >> 6 & 0x1F) | 0xC0) == 0) &&
-             (pushchar (json, (c >> 0 & 0x3F) | 0x80) == 0));
+    return (pushchar (json, (c >> 6 & 0x1F) | 0xC0) &&
+            pushchar (json, (c >> 0 & 0x3F) | 0x80));
   }
   else if (c < 0x010000)
   {
     if (c >= 0xD800 && c <= 0xDFFF)
     {
       json_error (json, "invalid codepoint U+%04" PRIX32, c);
-      return -1;
+      return false;
     }
 
-    return !((pushchar (json, (c >> 12 & 0x0F) | 0xE0) == 0) &&
-             (pushchar (json, (c >>  6 & 0x3F) | 0x80) == 0) &&
-             (pushchar (json, (c >>  0 & 0x3F) | 0x80) == 0));
+    return (pushchar (json, (c >> 12 & 0x0F) | 0xE0) &&
+            pushchar (json, (c >>  6 & 0x3F) | 0x80) &&
+            pushchar (json, (c >>  0 & 0x3F) | 0x80));
   }
   else if (c < 0x110000)
   {
-    return !((pushchar (json, (c >> 18 & 0x07) | 0xF0) == 0) &&
-             (pushchar (json, (c >> 12 & 0x3F) | 0x80) == 0) &&
-             (pushchar (json, (c >> 6  & 0x3F) | 0x80) == 0) &&
-             (pushchar (json, (c >> 0  & 0x3F) | 0x80) == 0));
+    return (pushchar (json, (c >> 18 & 0x07) | 0xF0) &&
+            pushchar (json, (c >> 12 & 0x3F) | 0x80) &&
+            pushchar (json, (c >> 6  & 0x3F) | 0x80) &&
+            pushchar (json, (c >> 0  & 0x3F) | 0x80));
   }
   else
   {
     json_error (json, "unable to encode U+%04" PRIX32 " as UTF-8", c);
-    return -1;
+    return false;
   }
 }
 
+// Return a hex digit value or -1 if invalid.
+//
 static int
 hexchar (int c)
 {
@@ -627,13 +629,13 @@ read_unicode_cp (json_stream *json)
   return cp;
 }
 
-static int
+static bool
 read_unicode (json_stream *json)
 {
   uint32_t cp, h, l;
 
   if ((cp = read_unicode_cp (json)) == (uint32_t)-1)
-    return -1;
+    return false;
 
   if (cp >= 0xD800 && cp <= 0xDBFF)
   {
@@ -646,32 +648,32 @@ read_unicode (json_stream *json)
     if (c == EOF)
     {
       json_error (json, "%s", "unterminated string literal in Unicode");
-      return -1;
+      return false;
     }
     else if (c != '\\')
     {
       json_error (json,
                   "invalid surrogate pair continuation %s, expected '\\'",
                   diag_char (json, c));
-      return -1;
+      return false;
     }
 
     c = source_get (json);
     if (c == EOF)
     {
       json_error (json, "%s", "unterminated string literal in Unicode");
-      return -1;
+      return false;
     }
     else if (c != 'u')
     {
       json_error (json,
                   "invalid surrogate pair continuation %s, expected 'u'",
                   diag_char (json, c));
-      return -1;
+      return false;
     }
 
     if ((l = read_unicode_cp (json)) == (uint32_t)-1)
-      return -1;
+      return false;
 
     if (l < 0xDC00 || l > 0xDFFF)
     {
@@ -679,7 +681,7 @@ read_unicode (json_stream *json)
                   "surrogate pair continuation \\u%04" PRIX32
                   " out of DC00-DFFF range",
                   l);
-      return -1;
+      return false;
     }
 
     cp = ((h - 0xD800) * 0x400) + ((l - 0xDC00) + 0x10000);
@@ -687,7 +689,7 @@ read_unicode (json_stream *json)
   else if (cp >= 0xDC00 && cp <= 0xDFFF)
   {
     json_error (json, "dangling surrogate \\u%04" PRIX32, cp);
-    return -1;
+    return false;
   }
 
   return encode_utf8 (json, cp);
@@ -709,14 +711,14 @@ read_latin_cp (json_stream *json)
     if (c == EOF)
     {
       json_error (json, "%s", "unterminated string literal in Latin escape");
-      return -1;
+      return (uint32_t)-1;
     }
     else if ((hc = hexchar (c)) == -1)
     {
       json_error (json,
                   "invalid Latin escape hex digit %s",
                   diag_char (json, c));
-      return -1;
+      return (uint32_t)-1;
     }
 
     cp += (unsigned int)hc * (1U << shift);
@@ -726,25 +728,25 @@ read_latin_cp (json_stream *json)
   return cp;
 }
 
-static int
+static bool
 read_latin (json_stream *json)
 {
   uint32_t cp;
 
   if ((cp = read_latin_cp (json)) == (uint32_t)-1)
-    return -1;
+    return false;
 
   return encode_utf8 (json, cp);
 }
 
-static int
+static bool
 read_escaped (json_stream *json)
 {
   int c = source_get (json);
   if (c == EOF)
   {
     json_error (json, "%s", "unterminated string literal in escape");
-    return -1;
+    return false;
   }
 
   // JSON escapes.
@@ -753,7 +755,7 @@ read_escaped (json_stream *json)
   if (c == 'u') // \xHHHH
     return read_unicode (json);
 
-  int u = -1;
+  int u = -1; // Unescaped character or -1 if invalid.
   switch (c)
   {
   case '\\': u = c;    break;
@@ -830,7 +832,7 @@ read_escaped (json_stream *json)
     case '\n':
     case 0x2028:
     case 0x2029:
-      return 0; // No pushchar().
+      return true; // No pushchar().
 
     default:
       // Pass as-is, including the control characters (see above).
@@ -844,17 +846,17 @@ read_escaped (json_stream *json)
     return pushchar (json, u);
 
   json_error (json, "invalid escape %s", diag_char (json, c));
-  return -1;
+  return false;
 }
 
-static int
+static bool
 read_utf8 (json_stream* json, int c)
 {
   size_t n = utf8_seq_length (c);
   if (!n)
   {
     json_error (json, "%s", "invalid UTF-8 character");
-    return -1;
+    return false;
   }
 
   char buf[4];
@@ -872,22 +874,22 @@ read_utf8 (json_stream* json, int c)
   if (i != n || !is_legal_utf8 ((unsigned char*)buf, n))
   {
     json_error (json, "%s", "invalid UTF-8 text");
-    return -1;
+    return false;
   }
 
   for (i = 0; i < n; ++i)
   {
-    if (pushchar (json, buf[i]) != 0)
-      return -1;
+    if (!pushchar (json, buf[i]))
+      return false;
   }
 
-  return 0;
+  return true;
 }
 
 static enum json_type
 read_string (json_stream *json, int quote)
 {
-  if (json->data.string == NULL && init_string (json) != 0)
+  if (json->data.string == NULL && !init_string (json))
     return JSON_ERROR;
 
   json->data.string_fill = 0;
@@ -902,16 +904,16 @@ read_string (json_stream *json, int quote)
     }
     else if (c == quote)
     {
-      return pushchar (json, '\0') == 0 ? JSON_STRING : JSON_ERROR;
+      return pushchar (json, '\0') ? JSON_STRING : JSON_ERROR;
     }
     else if (c == '\\')
     {
-      if (read_escaped (json) != 0)
+      if (!read_escaped (json))
         return JSON_ERROR;
     }
     else if ((unsigned int) c >= 0x80)
     {
-      if (read_utf8 (json, c) != 0)
+      if (!read_utf8 (json, c))
         return JSON_ERROR;
     }
     else
@@ -937,7 +939,7 @@ read_string (json_stream *json, int quote)
         return JSON_ERROR;
       }
 
-      if (pushchar (json, c) != 0)
+      if (!pushchar (json, c))
         return JSON_ERROR;
     }
   }
@@ -951,7 +953,7 @@ is_dec_digit (int c)
   return c >= '0' && c <= '9';
 }
 
-static int
+static bool
 read_dec_digits (json_stream *json)
 {
   int c;
@@ -959,8 +961,8 @@ read_dec_digits (json_stream *json)
   while (is_dec_digit (c = source_peek (json)))
   {
     source_get (json);
-    if (pushchar (json, c) != 0)
-      return -1;
+    if (!pushchar (json, c))
+      return false;
 
     nread++;
   }
@@ -972,10 +974,10 @@ read_dec_digits (json_stream *json)
     json_error (json,
                 "expected digit instead of %s",
                 diag_char (json, c));
-    return -1;
+    return false;
   }
 
-  return 0;
+  return true;
 }
 
 static bool
@@ -986,7 +988,7 @@ is_hex_digit (int c)
           (c >= 'A' && c <= 'F'));
 }
 
-static int
+static bool
 read_hex_digits (json_stream *json)
 {
   int c;
@@ -994,8 +996,8 @@ read_hex_digits (json_stream *json)
   while (is_hex_digit (c = source_peek (json)))
   {
     source_get (json);
-    if (pushchar (json, c) != 0)
-      return -1;
+    if (!pushchar (json, c))
+      return false;
 
     nread++;
   }
@@ -1005,21 +1007,21 @@ read_hex_digits (json_stream *json)
     source_get (json); // Consume.
 
     json_error (json, "expected hex digit instead of %s", diag_char (json, c));
-    return -1;
+    return false;
   }
 
-  return 0;
+  return true;
 }
 
 static enum json_type
 read_number (json_stream *json, int c)
 {
-  if (json->data.string == NULL && init_string (json) != 0)
+  if (json->data.string == NULL && !init_string (json))
     return JSON_ERROR;
 
   json->data.string_fill = 0;
 
-  if (pushchar (json, c) != 0)
+  if (!pushchar (json, c))
     return JSON_ERROR;
 
   // Note: we can only have '+' here if we are in the JSON5 mode.
@@ -1030,7 +1032,7 @@ read_number (json_stream *json, int c)
     if (is_dec_digit (c) ||
         ((json->flags & FLAG_JSON5) && (c == 'I' || c == 'N' || c == '.')))
     {
-      if (pushchar (json, c) != 0)
+      if (!pushchar (json, c))
         return JSON_ERROR;
 
       // Fall through.
@@ -1047,7 +1049,7 @@ read_number (json_stream *json, int c)
     c = source_peek (json);
     if (is_dec_digit (c))
     {
-      if (read_dec_digits (json) != 0)
+      if (!read_dec_digits (json))
         return JSON_ERROR;
     }
   }
@@ -1065,9 +1067,9 @@ read_number (json_stream *json, int c)
     {
       source_get (json); // Consume `x`/`X'.
 
-      return (pushchar (json, c) == 0     &&
-              read_hex_digits (json) == 0 &&
-              pushchar (json, '\0') == 0) ? JSON_NUMBER : JSON_ERROR;
+      return (pushchar (json, c)     &&
+              read_hex_digits (json) &&
+              pushchar (json, '\0')) ? JSON_NUMBER : JSON_ERROR;
     }
     // There is a nuance: `01` in normal mode is two values.
     //
@@ -1089,12 +1091,12 @@ read_number (json_stream *json, int c)
     // It is more straightforward to handle leading dot as a special case. It
     // also takes care of the invalid sole dot case.
     //
-    if (read_dec_digits (json) != 0)
+    if (!read_dec_digits (json))
       return JSON_ERROR;
 
     c = source_peek (json);
     if (c != 'e' && c != 'E')
-      return pushchar (json, '\0') == 0 ? JSON_NUMBER : JSON_ERROR;
+      return pushchar (json, '\0') ? JSON_NUMBER : JSON_ERROR;
   }
 
   // Up to decimal or exponent has been read.
@@ -1102,19 +1104,19 @@ read_number (json_stream *json, int c)
   c = source_peek (json);
   if (c != '.' && c != 'e' && c != 'E')
   {
-    return pushchar (json, '\0') == 0 ? JSON_NUMBER : JSON_ERROR;
+    return pushchar (json, '\0') ? JSON_NUMBER : JSON_ERROR;
   }
 
   if (c == '.')
   {
     source_get (json); // Consume `.`.
 
-    if (pushchar (json, c) != 0)
+    if (!pushchar (json, c))
       return JSON_ERROR;
 
     if ((json->flags & FLAG_JSON5) && !is_dec_digit (source_peek (json)))
       ; // Trailing dot.
-    else if (read_dec_digits (json) != 0)
+    else if (!read_dec_digits (json))
       return JSON_ERROR;
   }
 
@@ -1123,7 +1125,7 @@ read_number (json_stream *json, int c)
   if (c == 'e' || c == 'E')
   {
     source_get (json); // Consume `e`/`E`.
-    if (pushchar (json, c) != 0)
+    if (!pushchar (json, c))
       return JSON_ERROR;
 
     c = source_peek (json);
@@ -1131,15 +1133,15 @@ read_number (json_stream *json, int c)
     {
       source_get (json); // Consume `+`/`-`.
 
-      if (pushchar (json, c) != 0)
+      if (!pushchar (json, c))
         return JSON_ERROR;
 
-      if (read_dec_digits (json) != 0)
+      if (!read_dec_digits (json))
         return JSON_ERROR;
     }
     else if (is_dec_digit (c))
     {
-      if (read_dec_digits (json) != 0)
+      if (!read_dec_digits (json))
         return JSON_ERROR;
     }
     else
@@ -1151,7 +1153,7 @@ read_number (json_stream *json, int c)
     }
   }
 
-  return pushchar (json, '\0') == 0 ? JSON_NUMBER : JSON_ERROR;
+  return pushchar (json, '\0') ? JSON_NUMBER : JSON_ERROR;
 }
 
 bool
@@ -1587,14 +1589,14 @@ is_subseq_id_char (int c, bool extended)
 static enum json_type
 read_identifier (json_stream *json, int c)
 {
-  if (json->data.string == NULL && init_string (json) != 0)
+  if (json->data.string == NULL && !init_string (json))
     return JSON_ERROR;
 
   json->data.string_fill = 0;
 
   for (bool extended = (json->flags & FLAG_JSON5E);;)
   {
-    if (pushchar (json, c) != 0)
+    if (!pushchar (json, c))
       return JSON_ERROR;
 
     c = source_peek (json);
@@ -1605,7 +1607,7 @@ read_identifier (json_stream *json, int c)
     source_get (json);
   }
 
-  if (pushchar (json, '\0') != 0)
+  if (!pushchar (json, '\0'))
     return JSON_ERROR;
 
   return JSON_NAME;
