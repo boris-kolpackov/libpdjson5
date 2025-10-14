@@ -20,11 +20,9 @@
 
 // Runtime state flags.
 //
-#define FLAG_ERROR_IO      0x08U
-#define FLAG_ERROR_SYNTAX  0x10U
-#define FLAG_ERROR         (FLAG_ERROR_IO | FLAG_ERROR_SYNTAX)
-#define FLAG_NEWLINE       0x20U // Newline seen by last call to next().
-#define FLAG_IMPLIED_END   0x40U // Implied top-level object end is pending.
+#define FLAG_ERROR         0x08U
+#define FLAG_NEWLINE       0x10U // Newline seen by last call to next().
+#define FLAG_IMPLIED_END   0x20U // Implied top-level object end is pending.
 
 #define json_error(json, format, ...)                             \
   if (!(json->flags & FLAG_ERROR))                                \
@@ -32,7 +30,8 @@
     snprintf (json->error_message, sizeof (json->error_message),  \
               format,                                             \
               __VA_ARGS__);                                       \
-    json->flags |= FLAG_ERROR_SYNTAX;                             \
+    json->flags |= FLAG_ERROR;                                    \
+    json->subtype = JSON_ERROR_SYNTAX;                            \
   }
 
 #define json_io_error(json, message)                              \
@@ -41,7 +40,18 @@
     size_t n = sizeof (json->error_message) - 1;                  \
     strncpy (json->error_message, message, n);                    \
     json->error_message[n] = '\0';                                \
-    json->flags |= FLAG_ERROR_IO;                                 \
+    json->flags |= FLAG_ERROR;                                    \
+    json->subtype = JSON_ERROR_IO;                                \
+  }
+
+#define json_mem_error(json, message)                             \
+  if (!(json->flags & FLAG_ERROR))                                \
+  {                                                               \
+    size_t n = sizeof (json->error_message) - 1;                  \
+    strncpy (json->error_message, message, n);                    \
+    json->error_message[n] = '\0';                                \
+    json->flags |= FLAG_ERROR;                                    \
+    json->subtype = JSON_ERROR_MEMORY;                            \
   }
 
 static size_t
@@ -414,7 +424,7 @@ push (json_stream *json, enum json_type type)
       (struct json_stack *)json->alloc.realloc (json->stack, size); // THROW
     if (stack == NULL)
     {
-      json_error (json, "%s", "out of memory");
+      json_mem_error (json, "out of memory");
       return JSON_ERROR;
     }
 
@@ -456,6 +466,7 @@ init (json_stream *json)
   json->flags = 0;
   json->error_message[0] = '\0';
   json->ntokens = 0;
+  json->subtype = 0;
   json->peek = (enum json_type)0;
 
   json->pending.type = (enum json_type)0;
@@ -483,7 +494,7 @@ pushchar (json_stream *json, int c)
     char *buffer = (char *)json->alloc.realloc (json->data.string, size); // THROW
     if (buffer == NULL)
     {
-      json_error (json, "%s", "out of memory");
+      json_mem_error (json, "out of memory");
       return false;
     }
 
@@ -590,7 +601,7 @@ init_string (json_stream *json)
   json->data.string = (char *)json->alloc.malloc (json->data.string_size); // THROW
   if (json->data.string == NULL)
   {
-    json_error (json, "%s", "out of memory");
+    json_mem_error (json, "out of memory");
     return false;
   }
   return true;
@@ -1751,6 +1762,7 @@ json_next (json_stream *json)
   {
     enum json_type next = json->pending.type;
     json->pending.type = (enum json_type)0;
+    json->subtype = json->pending.subtype;
     json->start_lineno = json->pending.lineno;
     json->start_colno = json->pending.colno;
 
@@ -1760,6 +1772,7 @@ json_next (json_stream *json)
     return next;
   }
 
+  json->subtype = 0;
   json->start_lineno = 0;
   json->start_colno = 0;
 
@@ -1869,6 +1882,7 @@ json_next (json_stream *json)
         if (c == EOF)
         {
           json->pending.type = JSON_DONE;
+          json->pending.subtype = 0;
           json->pending.lineno = 0;
           json->pending.colno = 0;
 
@@ -2074,6 +2088,7 @@ json_next (json_stream *json)
         if (c == ':')
         {
           json->pending.type = JSON_NAME;
+          json->pending.subtype = 0;
           json->pending.lineno = lineno;
           json->pending.colno = colno;
 
@@ -2153,6 +2168,7 @@ json_next (json_stream *json)
         // out).
         //
         json->pending.type = JSON_OBJECT_END;
+        json->pending.subtype = 0;
         json->pending.lineno = 0;
         json->pending.colno = 0;
 
@@ -2226,6 +2242,12 @@ json_skip_until (json_stream *json, enum json_type type)
   }
 
   return type;
+}
+
+LIBPDJSON5_SYMEXPORT enum json_error_subtype
+json_get_error_subtype (json_stream *json)
+{
+  return (enum json_error_subtype)json->subtype;
 }
 
 const char *
@@ -2303,6 +2325,8 @@ json_source_get (json_stream *json)
   // In JSON5, if the caller starts reading a comment, we expect them to
   // finish reading it.
 
+  json->flags &= ~FLAG_ERROR;
+
   int c = source_get (json); // IOERROR: return as EOF to caller.
   if (json->linecon != 0)
   {
@@ -2324,13 +2348,15 @@ json_source_get (json_stream *json)
 int
 json_source_peek (json_stream *json)
 {
+  json->flags &= ~FLAG_ERROR;
+
   return source_peek (json); // IOERROR: return as EOF to caller.
 }
 
 bool
 json_source_error (json_stream *json)
 {
-  return (json->flags & FLAG_ERROR_IO);
+  return (json->flags & FLAG_ERROR) && (json->subtype & JSON_ERROR_IO);
 }
 
 void

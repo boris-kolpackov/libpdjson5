@@ -42,6 +42,15 @@ enum json_type
   JSON_NULL
 };
 
+// Parsing event subtypes for the JSON_ERROR event.
+//
+enum json_error_subtype
+{
+  JSON_ERROR_SYNTAX = 1,
+  JSON_ERROR_MEMORY,
+  JSON_ERROR_IO
+};
+
 // Custom allocator and io functions may throw provided the parser was
 // compiled with exceptions support (-fexceptions, etc). In this case, the
 // only valid operation on json_stream is to close it with json_close().
@@ -119,6 +128,11 @@ json_peek (json_stream *json);
 
 LIBPDJSON5_SYMEXPORT void
 json_reset (json_stream *json);
+
+// Get subtype for certain events.
+//
+LIBPDJSON5_SYMEXPORT enum json_error_subtype
+json_get_error_subtype (json_stream *json);
 
 // Return the object member name after JSON_NAME event.
 //
@@ -288,12 +302,15 @@ struct json_stream
   struct json_stack *stack;
   size_t stack_top;
   size_t stack_size;
-  enum json_type peek;
   uint32_t flags;
+
+  unsigned int subtype; // One of enum json_*_subtype.
+  enum json_type peek;
 
   struct
   {
     enum json_type type;
+    unsigned int subtype;
     uint64_t lineno;
     uint64_t colno;
   } pending;

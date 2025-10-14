@@ -36,7 +36,8 @@ parse (const void *data, size_t size,
     switch (t)
     {
     case JSON_ERROR:
-      assert (json_get_error (json) != NULL);
+      assert (json_get_error_subtype (json) == JSON_ERROR_SYNTAX &&
+              json_get_error (json) != NULL);
       break;
     case JSON_NAME:
       assert (json_get_name (json, NULL) != NULL);
