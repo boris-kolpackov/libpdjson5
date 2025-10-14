@@ -1,13 +1,17 @@
 // Usage: driver [<options>]
 //
-// --streaming  --  enable streaming mode
-// --separator  --  handle/print value separors in streaming mode
-// --json5      --  accept JSON5 input
-// --json5e     --  accept JSON5E input
+// --streaming      --  enable streaming mode
+// --separator      --  handle/print value separors in streaming mode
+// --io-error <pos> --  cause input stream error at or after position
+// --json5          --  accept JSON5 input
+// --json5e         --  accept JSON5E input
+//
 //
 
 #include <stdio.h>
-#include <string.h>
+#include <errno.h>
+#include <stdlib.h> // strtoull()
+#include <string.h> // str*()
 #include <stdint.h>
 #include <stdbool.h>
 #include <inttypes.h> // PR*
@@ -23,6 +27,7 @@ main (int argc, char *argv[])
 {
   bool streaming = false;
   bool separator = false;
+  uint64_t io_error = (uint64_t)-1;
   enum json_language language = JSON_LANGUAGE_JSON;
 
   for (int i = 1; i < argc; ++i)
@@ -33,6 +38,19 @@ main (int argc, char *argv[])
       streaming = true;
     else if (strcmp (a, "--separator") == 0)
       separator = true;
+    else if (strcmp (a, "--io-error") == 0)
+    {
+      if (++i < argc)
+      {
+        errno = 0;
+        io_error = strtoull (argv[i], NULL, 10);
+        if (errno == 0)
+          continue;
+      }
+
+      fprintf (stderr, "error: missing or invalid --io-error argument\n");
+      return 1;
+    }
     else if (strcmp (a, "--json5") == 0)
       language = JSON_LANGUAGE_JSON5;
     else if (strcmp (a, "--json5e") == 0)
@@ -60,6 +78,25 @@ main (int argc, char *argv[])
   enum json_type t;
   for (bool first = true;;)
   {
+    if (io_error != (uint64_t)-1)
+    {
+      uint64_t p = json_get_position (&json);
+
+      // Note that we don't observe every position since some of them are
+      // passed over inside the parser. This limits the failure points we can
+      // test (would need to use custom io for that).
+      //
+      if (p >= io_error)
+      {
+        printf ("%3" PRIu64 ",%3" PRIu64 ": <io error at %" PRIu64 ">\n",
+                json_get_line (&json),
+                json_get_column (&json),
+                p);
+
+        fclose (stdin);
+      }
+    }
+
     t = json_next (&json);
 
     if (t == JSON_ERROR)

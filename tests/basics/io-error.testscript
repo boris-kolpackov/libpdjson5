@@ -1,0 +1,27 @@
+: begin
+:
+$* --io-error 0 <:'true' >>EOO 2>>EOE !=0
+  1,  1: <io error at 0>
+EOO
+<stdin>:1:1: error: unable to read input text
+EOE
+
+: end
+:
+$* --io-error 4 <'true ' >>EOO 2>>EOE!=0
+  1,  1: <true>
+  1,  1: <io error at 4>
+EOO
+<stdin>:1:4: error: unable to read input text
+EOE
+
+: middle
+:
+$* --io-error 8 <'{"foo":1,"bar":2}' >>EOO 2>>EOE!=0
+  1,  1: {
+  1,  2:   foo
+  1,  8:   1
+  1,  8: <io error at 8>
+EOO
+<stdin>:1:8: error: unable to read input text
+EOE
