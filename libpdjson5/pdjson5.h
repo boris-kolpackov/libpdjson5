@@ -193,7 +193,7 @@ LIBPDJSON5_SYMEXPORT bool json_is_space (json_stream *json, int byte);
 //
 // This function is primarily meant for custom handling of separators between
 // values in the streaming mode. Its semantics is rather convoluted due to the
-// above get/peek interface operating on bytes, not codepoints.
+// source get/peek interface operating on bytes, not codepoints.
 //
 LIBPDJSON5_SYMEXPORT int
 json_skip_if_space (json_stream *json, int byte, uint32_t *codepoint);
@@ -201,10 +201,16 @@ json_skip_if_space (json_stream *json, int byte, uint32_t *codepoint);
 // Implementation details.
 //
 
+enum json_source_tag
+{
+  JSON_SOURCE_BUFFER = 1,
+  JSON_SOURCE_USER,
+  JSON_SOURCE_STREAM
+};
+
 struct json_source
 {
-  int (*get) (struct json_source *);
-  int (*peek) (struct json_source *);
+  enum json_source_tag tag;
   uint64_t position;
   union
   {
@@ -212,14 +218,16 @@ struct json_source
     {
       FILE *stream;
     } stream;
+
     struct
     {
       const char *buffer;
       size_t length;
     } buffer;
+
     struct
     {
-      void *ptr;
+      void *data;
       json_user_io get;
       json_user_io peek;
     } user;
