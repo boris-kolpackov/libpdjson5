@@ -53,10 +53,25 @@ struct json_allocator
   void (*free) (void *);
 };
 
-typedef int (*json_user_io) (void *user_data);
+// The peek() and get() functions are expected to return OEF on error, which
+// can then be queried by calling error() (so essentially the stdio model).
+// If the error() function is NULL, then assume there can be no io error.
+//
+// Note that we reasonably assume that if peek() did not fail, then the
+// subsequent get() won't either. Likewise, if peek() did fail, then we assume
+// the subsequent get() will return an error as well. Finally, we assume we
+// can call failed peek() again with consistent results.
+//
+struct json_user_io
+{
+  int (*peek) (void *user_data);
+  int (*get) (void *user_data);
+  bool (*error) (void *user_data);
+};
 
 typedef struct json_stream json_stream;
 typedef struct json_allocator json_allocator;
+typedef struct json_user_io json_user_io;
 
 LIBPDJSON5_SYMEXPORT void
 json_open_buffer (json_stream *json, const void *buffer, size_t size);
@@ -69,15 +84,14 @@ json_open_stream (json_stream *json, FILE *stream);
 
 LIBPDJSON5_SYMEXPORT void
 json_open_user (json_stream *json,
-                json_user_io get,
-                json_user_io peek,
+                const json_user_io *user_io,
                 void *user_data);
 
 LIBPDJSON5_SYMEXPORT void
 json_close (json_stream *json);
 
 LIBPDJSON5_SYMEXPORT void
-json_set_allocator (json_stream *json, json_allocator *a);
+json_set_allocator (json_stream *json, const json_allocator *allocator);
 
 LIBPDJSON5_SYMEXPORT void
 json_set_streaming (json_stream *json, bool mode);
@@ -230,8 +244,7 @@ struct json_source
     struct
     {
       void *data;
-      json_user_io get;
-      json_user_io peek;
+      json_user_io io;
     } user;
   } source;
 };
