@@ -38,19 +38,21 @@ void pdjson_open_buffer(pdjson_stream *json, const void *buffer, size_t size);
 void pdjson_close(pdjson_stream *json);
 ```
 
-After opening a stream, custom allocator callbacks can be specified,
-in case allocations should not come from a system-supplied malloc.
-(When no custom allocator is specified, the system allocator is used.)
+After opening a stream, custom allocator callbacks can be specified, in case
+allocations should not come from a system-supplied malloc. (When no custom
+allocator is specified, the system allocator is used.)
 
 ```c
 struct pdjson_allocator {
-    void *(*malloc)(size_t);
-    void *(*realloc)(void *, size_t);
-    void (*free)(void *);
+    void *(*malloc)(size_t, void *user_data);
+    void *(*realloc)(void *, size_t, void *user_data);
+    void (*free)(void *, size_t, void *user_data);
 };
 
 
-void pdjson_set_allocator(pdjson_stream *json, pdjson_allocator *a);
+void pdjson_set_allocator(pdjson_stream *json,
+                          const pdjson_allocator *a,
+                          void *user_data);
 ```
 
 By default only one value is read from the stream. The parser can be
