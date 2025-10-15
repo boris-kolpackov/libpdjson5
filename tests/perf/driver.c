@@ -7,8 +7,10 @@
 // --json5            --  parse as JSON5 input
 // --json5e           --  parse as JSON5E input
 //
+// Note that --stdio is not supported on Windows.
+//
 
-// fmemopen() is in POSIX.1-2008.
+// fmemopen() is in POSIX.1-2008. Not available on Windows.
 //
 #ifndef _POSIX_C_SOURCE
 #  define _POSIX_C_SOURCE 200809L
@@ -30,21 +32,20 @@
 #undef NDEBUG
 #include <assert.h>
 
-static const char json_fragment[] = "\
-    \"boolean_value\": true,\n\
-    \"null_value\": null,\n\
-    \"integer_value\": 123456789,\n\
-    \"string_value\": \"77bd6c2ee33172287318170a8c7d357fe03f65bcbbf942e179b2a2ad8202e24f\",\n\
-    \"date_time\": \"2025-10-14T16:49:47Z\",\n\
-    \"array_integer_value\": [-100, -10, -1, 0, 1, 10, 100],\n\
-    \"array_string_value\": [\"memory exceeded\", \"disk exceeded\"],\n\
-    \"object_value\": {\n\
-        \"boolean\": false,\n\
-        \"integer\": 9876543210,\n\
-        \"array\": [123, 234, 345],\n\
-        \"object\": {\"line\":73,\"column\":64,\"position\":123}\n\
-    }\
-";
+static const char json_fragment[] =
+"    \"boolean_value\": true,\n"
+"    \"null_value\": null,\n"
+"    \"integer_value\": 123456789,\n"
+"    \"string_value\": \"77bd6c2ee33172287318170a8c7d357fe03f65bcbbf942e179b2a2ad8202e24f\",\n"
+"    \"date_time\": \"2025-10-14T16:49:47Z\",\n"
+"    \"array_integer_value\": [-100, -10, -1, 0, 1, 10, 100],\n"
+"    \"array_string_value\": [\"memory exceeded\", \"disk exceeded\"],\n"
+"    \"object_value\": {\n"
+"        \"boolean\": false,\n"
+"        \"integer\": 9876543210,\n"
+"        \"array\": [123, 234, 345],\n"
+"        \"object\": {\"line\":73,\"column\":64,\"position\":123}\n"
+"    }";
 
 struct buffer
 {
@@ -177,12 +178,17 @@ main (int argc, char *argv[])
   FILE *mstream = NULL;
   if (stdio)
   {
+#ifndef _WIN32
     mstream = fmemopen (buf.data, buf.size, "r");
     if (mstream == NULL)
     {
       fprintf (stderr, "error: unable to open stdio memory stream\n");
       return 1;
     }
+#else
+    fprintf (stderr, "error: stdio memory stream not supported on Windows\n");
+    return 1;
+#endif
   }
 
   pdjson_stream json[1];
