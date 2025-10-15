@@ -203,6 +203,8 @@ source_peek (pdjson_stream *json)
 
       return c;
     }
+  case PDJSON_SOURCE_NULL:
+    break;
   }
 
   io_error (json, "unable to read input text");
@@ -247,6 +249,8 @@ source_get (pdjson_stream *json)
 
       return c;
     }
+  case PDJSON_SOURCE_NULL:
+    break;
   }
 
   io_error (json, "unable to read input text");
@@ -458,38 +462,6 @@ pop (pdjson_stream *json, enum pdjson_type type)
 
   json->stack_top--;
   return type;
-}
-
-static void
-init (pdjson_stream *json)
-{
-  json->lineno = 1;
-  json->linepos = 0;
-  json->lineadj = 0;
-  json->linecon = 0;
-  json->start_lineno = 0;
-  json->start_colno = 0;
-  json->flags = 0;
-  json->error_message[0] = '\0';
-  json->ntokens = 0;
-  json->subtype = 0;
-  json->peek = (enum pdjson_type)0;
-
-  json->pending.type = (enum pdjson_type)0;
-
-  json->stack = NULL;
-  json->stack_top = (size_t)-1;
-  json->stack_size = 0;
-
-  json->data.string = NULL;
-  json->data.string_size = 0;
-  json->data.string_fill = 0;
-  json->source.position = 0;
-
-  json->alloc.malloc = NULL;
-  json->alloc.realloc = NULL;
-  json->alloc.free = NULL;
-  json->alloc_data = NULL;
 }
 
 static bool
@@ -2209,15 +2181,6 @@ pdjson_next (pdjson_stream *json)
   }
 }
 
-void
-pdjson_reset (pdjson_stream *json)
-{
-  json->stack_top = (size_t)-1;
-  json->ntokens = 0;
-  json->flags &= ~(FLAG_ERROR | FLAG_IMPLIED_END);
-  json->error_message[0] = '\0';
-}
-
 enum pdjson_type
 pdjson_skip (pdjson_stream *json)
 {
@@ -2383,9 +2346,92 @@ pdjson_source_error (pdjson_stream *json)
 }
 
 void
+pdjson_reset (pdjson_stream *json)
+{
+  json->start_lineno = 0;
+  json->start_colno = 0;
+
+  json->flags &= ~(FLAG_ERROR | FLAG_IMPLIED_END);
+  json->ntokens = 0;
+  json->subtype = 0;
+  json->peek = (enum pdjson_type)0;
+  json->pending.type = (enum pdjson_type)0;
+
+  json->stack_top = (size_t)-1;
+  json->data.string_fill = 0;
+
+  json->error_message[0] = '\0';
+}
+
+static void
+init (pdjson_stream *json, bool reinit)
+{
+  json->lineno = 1;
+  json->linepos = 0;
+  json->lineadj = 0;
+  json->linecon = 0;
+  json->start_lineno = 0;
+  json->start_colno = 0;
+  json->source.position = 0;
+
+  json->flags &= reinit ? ~(FLAG_ERROR | FLAG_IMPLIED_END) : 0;
+  json->ntokens = 0;
+  json->subtype = 0;
+  json->peek = (enum pdjson_type)0;
+  json->pending.type = (enum pdjson_type)0;
+
+  json->error_message[0] = '\0';
+
+  json->stack_top = (size_t)-1;
+  if (!reinit)
+  {
+    json->stack = NULL;
+    json->stack_size = 0;
+  }
+
+  json->data.string_fill = 0;
+  if (!reinit)
+  {
+    json->data.string = NULL;
+    json->data.string_size = 0;
+  }
+
+  if (!reinit)
+  {
+    json->alloc.malloc = NULL;
+    json->alloc.realloc = NULL;
+    json->alloc.free = NULL;
+    json->alloc_data = NULL;
+  }
+}
+
+void
+pdjson_open_null (pdjson_stream *json)
+{
+  init (json, false);
+  json->source.tag = PDJSON_SOURCE_NULL;
+}
+
+void
+pdjson_reopen_null (pdjson_stream *json)
+{
+  init (json, true);
+  json->source.tag = PDJSON_SOURCE_NULL;
+}
+
+void
 pdjson_open_buffer (pdjson_stream *json, const void *buffer, size_t size)
 {
-  init (json);
+  init (json, false);
+  json->source.tag = PDJSON_SOURCE_BUFFER;
+  json->source.source.buffer.buffer = (const char *)buffer;
+  json->source.source.buffer.length = size;
+}
+
+void
+pdjson_reopen_buffer (pdjson_stream *json, const void *buffer, size_t size)
+{
+  init (json, true);
   json->source.tag = PDJSON_SOURCE_BUFFER;
   json->source.source.buffer.buffer = (const char *)buffer;
   json->source.source.buffer.length = size;
@@ -2398,9 +2444,23 @@ pdjson_open_string (pdjson_stream *json, const char *string)
 }
 
 void
+pdjson_reopen_string (pdjson_stream *json, const char *string)
+{
+  pdjson_reopen_buffer (json, string, strlen (string));
+}
+
+void
 pdjson_open_stream (pdjson_stream *json, FILE *stream)
 {
-  init (json);
+  init (json, false);
+  json->source.tag = PDJSON_SOURCE_STREAM;
+  json->source.source.stream.stream = stream;
+}
+
+void
+pdjson_reopen_stream (pdjson_stream *json, FILE *stream)
+{
+  init (json, true);
   json->source.tag = PDJSON_SOURCE_STREAM;
   json->source.source.stream.stream = stream;
 }
@@ -2408,7 +2468,16 @@ pdjson_open_stream (pdjson_stream *json, FILE *stream)
 void
 pdjson_open_user (pdjson_stream *json, const pdjson_user_io *io, void *data)
 {
-  init (json);
+  init (json, false);
+  json->source.tag = PDJSON_SOURCE_USER;
+  json->source.source.user.data = data;
+  json->source.source.user.io = *io;
+}
+
+void
+pdjson_reopen_user (pdjson_stream *json, const pdjson_user_io *io, void *data)
+{
+  init (json, true);
   json->source.tag = PDJSON_SOURCE_USER;
   json->source.source.user.data = data;
   json->source.source.user.io = *io;
