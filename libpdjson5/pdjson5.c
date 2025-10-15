@@ -1249,7 +1249,7 @@ read_number (pdjson_stream *json, int c)
 }
 
 static inline bool
-is_space (pdjson_stream *json, int c)
+is_space (const pdjson_stream *json, int c)
 {
   switch (c)
   {
@@ -1425,7 +1425,7 @@ skip_comment (pdjson_stream *json, int c)
 }
 
 bool
-pdjson_is_space (pdjson_stream *json, int c)
+pdjson_is_space (const pdjson_stream *json, int c)
 {
   return is_space (json, c);
 }
@@ -2237,19 +2237,19 @@ pdjson_skip_until (pdjson_stream *json, enum pdjson_type type)
 }
 
 LIBPDJSON5_SYMEXPORT enum pdjson_error_subtype
-pdjson_get_error_subtype (pdjson_stream *json)
+pdjson_get_error_subtype (const pdjson_stream *json)
 {
   return (enum pdjson_error_subtype)json->subtype;
 }
 
 const char *
-pdjson_get_name (pdjson_stream *json, size_t *size)
+pdjson_get_name (const pdjson_stream *json, size_t *size)
 {
   return pdjson_get_value (json, size);
 }
 
 const char *
-pdjson_get_value (pdjson_stream *json, size_t *size)
+pdjson_get_value (const pdjson_stream *json, size_t *size)
 {
   if (size != NULL)
     *size = json->data.string_fill;
@@ -2261,19 +2261,19 @@ pdjson_get_value (pdjson_stream *json, size_t *size)
 }
 
 const char *
-pdjson_get_error (pdjson_stream *json)
+pdjson_get_error (const pdjson_stream *json)
 {
   return json->flags & FLAG_ERROR ? json->error_message : NULL;
 }
 
 uint64_t
-pdjson_get_line (pdjson_stream *json)
+pdjson_get_line (const pdjson_stream *json)
 {
   return json->start_lineno == 0 ? json->lineno : json->start_lineno;
 }
 
 uint64_t
-pdjson_get_column (pdjson_stream *json)
+pdjson_get_column (const pdjson_stream *json)
 {
   return json->start_colno == 0
     ? (json->source.position == 0
@@ -2283,19 +2283,19 @@ pdjson_get_column (pdjson_stream *json)
 }
 
 uint64_t
-pdjson_get_position (pdjson_stream *json)
+pdjson_get_position (const pdjson_stream *json)
 {
   return json->source.position;
 }
 
 size_t
-pdjson_get_depth (pdjson_stream *json)
+pdjson_get_depth (const pdjson_stream *json)
 {
   return json->stack_top + 1;
 }
 
 enum pdjson_type
-pdjson_get_context (pdjson_stream *json, uint64_t *count)
+pdjson_get_context (const pdjson_stream *json, uint64_t *count)
 {
   if (json->flags & FLAG_ERROR)
     return PDJSON_ERROR;

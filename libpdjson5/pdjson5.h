@@ -166,14 +166,14 @@ pdjson_reset (pdjson_stream *json);
 // Get subtype for certain events.
 //
 LIBPDJSON5_SYMEXPORT enum pdjson_error_subtype
-pdjson_get_error_subtype (pdjson_stream *json);
+pdjson_get_error_subtype (const pdjson_stream *json);
 
 // Return the object member name after PDJSON_NAME event.
 //
 // Note that the returned size counts the trailing `\0`.
 //
 LIBPDJSON5_SYMEXPORT const char *
-pdjson_get_name (pdjson_stream *json, size_t *size);
+pdjson_get_name (const pdjson_stream *json, size_t *size);
 
 // Return the string or number value after the PDJSON_STRING or PDJSON_NUMBER
 // events.
@@ -181,7 +181,7 @@ pdjson_get_name (pdjson_stream *json, size_t *size);
 // Note that the returned size counts the trailing `\0`.
 //
 LIBPDJSON5_SYMEXPORT const char *
-pdjson_get_value (pdjson_stream *json, size_t *size);
+pdjson_get_value (const pdjson_stream *json, size_t *size);
 
 // Skip over the next value, skipping over entire arrays and objects. Return
 // the skipped value.
@@ -196,16 +196,16 @@ LIBPDJSON5_SYMEXPORT enum pdjson_type
 pdjson_skip_until (pdjson_stream *json, enum pdjson_type type);
 
 LIBPDJSON5_SYMEXPORT uint64_t
-pdjson_get_line (pdjson_stream *json);
+pdjson_get_line (const pdjson_stream *json);
 
 LIBPDJSON5_SYMEXPORT uint64_t
-pdjson_get_column (pdjson_stream *json);
+pdjson_get_column (const pdjson_stream *json);
 
 LIBPDJSON5_SYMEXPORT uint64_t
-pdjson_get_position (pdjson_stream *json);
+pdjson_get_position (const pdjson_stream *json);
 
 LIBPDJSON5_SYMEXPORT size_t
-pdjson_get_depth (pdjson_stream *json);
+pdjson_get_depth (const pdjson_stream *json);
 
 // Return the current parsing context, that is, PDJSON_OBJECT if we are inside
 // an object, PDJSON_ARRAY if we are inside an array, and PDJSON_DONE if we
@@ -218,17 +218,24 @@ pdjson_get_depth (pdjson_stream *json);
 // observed the PDJSON_NAME event.
 //
 LIBPDJSON5_SYMEXPORT enum pdjson_type
-pdjson_get_context (pdjson_stream *json, uint64_t *count);
+pdjson_get_context (const pdjson_stream *json, uint64_t *count);
 
 // Return error message if the previously peeked at or consumed even was
 // PDJSON_ERROR and NULL otherwise. Note that the message is UTF-8 encoded.
 //
-LIBPDJSON5_SYMEXPORT const char *pdjson_get_error (pdjson_stream *json);
+LIBPDJSON5_SYMEXPORT const char *
+pdjson_get_error (const pdjson_stream *json);
 
-LIBPDJSON5_SYMEXPORT int pdjson_source_get (pdjson_stream *json);
-LIBPDJSON5_SYMEXPORT int pdjson_source_peek (pdjson_stream *json);
-LIBPDJSON5_SYMEXPORT bool pdjson_source_error (pdjson_stream *json);
+// Direct byte stream access.
+//
+LIBPDJSON5_SYMEXPORT int
+pdjson_source_get (pdjson_stream *json);
 
+LIBPDJSON5_SYMEXPORT int
+pdjson_source_peek (pdjson_stream *json);
+
+LIBPDJSON5_SYMEXPORT bool
+pdjson_source_error (pdjson_stream *json);
 
 // Note that this function only examines the first byte of a potentially
 // multi-byte UTF-8 sequence. As result, it only returns true for whitespaces
@@ -237,7 +244,8 @@ LIBPDJSON5_SYMEXPORT bool pdjson_source_error (pdjson_stream *json);
 // need to do this yourself (and diagnose any non-whitespaces as appropriate)
 // or use pdjson_skip_if_space() below.
 //
-LIBPDJSON5_SYMEXPORT bool pdjson_is_space (pdjson_stream *json, int byte);
+LIBPDJSON5_SYMEXPORT bool
+pdjson_is_space (const pdjson_stream *json, int byte);
 
 // Given a peeked at byte, consume it and any following bytes that are part of
 // the same multi-byte UTF-8 sequence if it is a whitespace and return 1. If
