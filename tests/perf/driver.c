@@ -238,5 +238,7 @@ main (int argc, char *argv[])
   if (mstream != NULL)
     fclose (mstream);
 
+  free (buf.data);
+
   return r;
 }
