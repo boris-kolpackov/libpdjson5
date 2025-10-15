@@ -167,18 +167,10 @@ is_legal_utf8 (const unsigned char *bytes, size_t length)
 // IOERROR comment to highlight where/how the io error is handled.
 //
 static int
-source_peek (pdjson_stream *json)
+source_peek_slow (pdjson_stream *json, struct pdjson_source *source)
 {
-  struct pdjson_source *source = &json->source;
-
   switch (source->tag)
   {
-  case PDJSON_SOURCE_BUFFER:
-    {
-      return source->position != source->source.buffer.length
-        ? source->source.buffer.buffer[source->position]
-        : EOF;
-    }
   case PDJSON_SOURCE_USER:
     {
       int c = source->source.user.io.peek (source->source.user.data);
@@ -203,6 +195,7 @@ source_peek (pdjson_stream *json)
 
       return c;
     }
+  case PDJSON_SOURCE_BUFFER:
   case PDJSON_SOURCE_NULL:
     break;
   }
@@ -211,19 +204,23 @@ source_peek (pdjson_stream *json)
   return EOF;
 }
 
-static int
-source_get (pdjson_stream *json)
+static inline int
+source_peek (pdjson_stream *json)
 {
   struct pdjson_source *source = &json->source;
 
+  return source->tag == PDJSON_SOURCE_BUFFER
+    ? (source->position != source->source.buffer.length
+       ? source->source.buffer.buffer[source->position]
+       : EOF)
+    : source_peek_slow (json, source);
+}
+
+static int
+source_get_slow (pdjson_stream *json, struct pdjson_source *source)
+{
   switch (source->tag)
   {
-  case PDJSON_SOURCE_BUFFER:
-    {
-      return source->position != source->source.buffer.length
-        ? source->source.buffer.buffer[source->position++]
-        : EOF;
-    }
   case PDJSON_SOURCE_USER:
     {
       int c = source->source.user.io.get (source->source.user.data);
@@ -249,12 +246,25 @@ source_get (pdjson_stream *json)
 
       return c;
     }
+  case PDJSON_SOURCE_BUFFER:
   case PDJSON_SOURCE_NULL:
     break;
   }
 
   io_error (json, "unable to read input text");
   return EOF;
+}
+
+static inline int
+source_get (pdjson_stream *json)
+{
+  struct pdjson_source *source = &json->source;
+
+  return source->tag == PDJSON_SOURCE_BUFFER
+    ? (source->position != source->source.buffer.length
+       ? source->source.buffer.buffer[source->position++]
+       : EOF)
+    : source_get_slow (json, source);
 }
 
 // Given the first byte of input or EOF (-1), read and decode the remaining
@@ -1019,7 +1029,7 @@ read_string (pdjson_stream *json, int quote)
   return PDJSON_ERROR;
 }
 
-static bool
+static inline bool
 is_dec_digit (int c)
 {
   return c >= '0' && c <= '9';
@@ -1050,7 +1060,7 @@ read_dec_digits (pdjson_stream *json)
   return (json->flags & FLAG_ERROR) ? false : true; // IOERROR
 }
 
-static bool
+static inline bool
 is_hex_digit (int c)
 {
   return ((c >= '0' && c <= '9') ||
@@ -1238,7 +1248,7 @@ read_number (pdjson_stream *json, int c)
     : PDJSON_ERROR;
 }
 
-bool
+static inline bool
 is_space (pdjson_stream *json, int c)
 {
   switch (c)
@@ -1646,7 +1656,7 @@ read_value (pdjson_stream *json, int c)
 // illegal (and, yes, true-1 is a valid two-value input in the streaming
 // mode).
 //
-static bool
+static inline bool
 is_first_id_char (int c)
 {
   return (c == '_'               ||
@@ -1655,7 +1665,7 @@ is_first_id_char (int c)
           c == '$');
 }
 
-static bool
+static inline bool
 is_subseq_id_char (int c, bool extended)
 {
   return (c == '_'                             ||
