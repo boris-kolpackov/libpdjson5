@@ -12,6 +12,20 @@
 #include <string.h>   // strlen()
 #include <inttypes.h> // PR*
 
+// Defaults.
+//
+#ifndef LIBPDJSON5_STACK_INC
+#  define LIBPDJSON5_STACK_INC 16
+#endif
+
+#ifndef LIBPDJSON5_STACK_MAX
+#  define LIBPDJSON5_STACK_MAX 1024
+#endif
+
+#ifndef LIBPDJSON5_VALUE_INIT
+#  define LIBPDJSON5_VALUE_INIT 256
+#endif
+
 // Feature flags.
 //
 #define FLAG_STREAMING    0x01U
@@ -407,12 +421,6 @@ diag_codepoint (pdjson_stream *json, uint32_t c)
   return s;
 }
 
-// See also LIBPDJSON5_STACK_MAX below.
-//
-#ifndef LIBPDJSON5_STACK_INC
-#  define LIBPDJSON5_STACK_INC 4
-#endif
-
 struct pdjson_stack
 {
   enum pdjson_type type;
@@ -424,7 +432,7 @@ push (pdjson_stream *json, enum pdjson_type type)
 {
   size_t new_stack_top = json->stack_top + 1;
 
-#ifdef LIBPDJSON5_STACK_MAX
+#if LIBPDJSON5_STACK_MAX != 0
   if (new_stack_top > LIBPDJSON5_STACK_MAX)
   {
     json_error (json, "%s", "maximum depth of nesting reached");
@@ -591,7 +599,7 @@ is_match_string (pdjson_stream *json,
 static bool
 init_string (pdjson_stream *json)
 {
-  json->data.string_size = 256; // @@ Make configurable?
+  json->data.string_size = LIBPDJSON5_VALUE_INIT;
 
   json->data.string = (char *)
     (json->alloc.malloc == NULL
@@ -2236,7 +2244,7 @@ pdjson_skip_until (pdjson_stream *json, enum pdjson_type type)
   return type;
 }
 
-LIBPDJSON5_SYMEXPORT enum pdjson_error_subtype
+enum pdjson_error_subtype
 pdjson_get_error_subtype (const pdjson_stream *json)
 {
   return (enum pdjson_error_subtype)json->subtype;
