@@ -1,0 +1,3 @@
+import libs = libpdjson5%lib{pdjson5}
+
+exe{driver}: {h c}{**} $libs
