@@ -96,9 +96,41 @@ pdjson_open_user (pdjson_stream *json,
                   const pdjson_user_io *user_io,
                   void *user_data);
 
+// Open the parser without input. An attempt to parse in this state results in
+// an input error. This ability is primarily useful to regularize reopening.
+//
+LIBPDJSON5_SYMEXPORT void
+pdjson_open_null (pdjson_stream *json);
+
 LIBPDJSON5_SYMEXPORT void
 pdjson_close (pdjson_stream *json);
 
+// Reopen the parser reusing any already allocated memory. Note that these
+// functions are used instead of pdjson_close(), not in addition to it. All
+// the other settings (allocator, features enabled, etc) are preserved. To
+// regularize reopening, use pdjson_open_null().
+//
+LIBPDJSON5_SYMEXPORT void
+pdjson_reopen_buffer (pdjson_stream *json, const void *buffer, size_t size);
+
+LIBPDJSON5_SYMEXPORT void
+pdjson_reopen_string (pdjson_stream *json, const char *string);
+
+LIBPDJSON5_SYMEXPORT void
+pdjson_reopen_stream (pdjson_stream *json, FILE *stream);
+
+LIBPDJSON5_SYMEXPORT void
+pdjson_reopen_user (pdjson_stream *json,
+                    const pdjson_user_io *user_io,
+                    void *user_data);
+
+LIBPDJSON5_SYMEXPORT void
+pdjson_reopen_null (pdjson_stream *json);
+
+
+// Set custom allocator. Note that this should be done before performing any
+// parsing.
+//
 LIBPDJSON5_SYMEXPORT void
 pdjson_set_allocator (pdjson_stream *json,
                       const pdjson_allocator *allocator,
@@ -238,7 +270,8 @@ enum pdjson_source_tag
 {
   PDJSON_SOURCE_BUFFER = 1,
   PDJSON_SOURCE_USER,
-  PDJSON_SOURCE_STREAM
+  PDJSON_SOURCE_STREAM,
+  PDJSON_SOURCE_NULL
 };
 
 struct pdjson_source

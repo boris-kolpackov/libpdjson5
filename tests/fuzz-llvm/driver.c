@@ -10,17 +10,16 @@
 // and false otherwise.
 //
 static bool
-parse (const void *data, size_t size,
+parse (pdjson_stream *json,
+       const void *data, size_t size,
        enum pdjson_language language,
        bool streaming)
 {
-  struct pdjson_stream json[1];
-  enum pdjson_type t = PDJSON_DONE;
-
-  pdjson_open_buffer (json, data, size);
+  pdjson_reopen_buffer (json, data, size);
   pdjson_set_streaming (json, streaming);
   pdjson_set_language (json, language);
 
+  enum pdjson_type t;
   do
   {
     t = pdjson_next (json);
@@ -66,14 +65,16 @@ parse (const void *data, size_t size,
   }
   while (t != PDJSON_DONE && t != PDJSON_ERROR);
 
-  pdjson_close (json);
-
   return t != PDJSON_ERROR;
 }
 
 int
 LLVMFuzzerTestOneInput (const uint8_t* data, size_t size)
 {
+  pdjson_stream json[1];
+
+  pdjson_open_null (json);
+
   // Parse the input in every mode.
   //
   // While it may see that if the input is valid in the stricter mode, then
@@ -81,12 +82,14 @@ LLVMFuzzerTestOneInput (const uint8_t* data, size_t size)
   // different modes may apply different parsing logic to the same input
   // (implied object handling in JSON5E is a good example).
   //
-  parse (data, size, PDJSON_LANGUAGE_JSON,   false);
-  parse (data, size, PDJSON_LANGUAGE_JSON,   true);
-  parse (data, size, PDJSON_LANGUAGE_JSON5,  false);
-  parse (data, size, PDJSON_LANGUAGE_JSON5,  true);
-  parse (data, size, PDJSON_LANGUAGE_JSON5E, false);
-  parse (data, size, PDJSON_LANGUAGE_JSON5E, true);
+  parse (json, data, size, PDJSON_LANGUAGE_JSON,   false);
+  parse (json, data, size, PDJSON_LANGUAGE_JSON,   true);
+  parse (json, data, size, PDJSON_LANGUAGE_JSON5,  false);
+  parse (json, data, size, PDJSON_LANGUAGE_JSON5,  true);
+  parse (json, data, size, PDJSON_LANGUAGE_JSON5E, false);
+  parse (json, data, size, PDJSON_LANGUAGE_JSON5E, true);
+
+  pdjson_close (json);
 
   return 0;
 }
