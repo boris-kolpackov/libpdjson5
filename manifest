@@ -1,6 +1,6 @@
 : 1
 name: libpdjson5
-version: 0.1.0-a.0.z
+version: 1.0.0
 language: c
 summary: JSON/JSON5 pull parser C library
 license: Unlicense
