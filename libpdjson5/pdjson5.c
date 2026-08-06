@@ -2263,13 +2263,18 @@ pdjson_get_name (const pdjson_stream *json, size_t *size)
 const char *
 pdjson_get_value (const pdjson_stream *json, size_t *size)
 {
-  if (size != NULL)
-    *size = json->data.string_fill;
+  if (!(json->flags & FLAG_ERROR) && json->data.string != NULL)
+  {
+    if (size != NULL)
+      *size = json->data.string_fill;
 
-  if (json->data.string == NULL)
-    return "";
-  else
     return json->data.string;
+  }
+
+  if (size != NULL)
+    *size = 0;
+
+  return "";
 }
 
 const char *
